@@ -57,6 +57,8 @@ export type ListExercisesParams = {
   difficulty?: string;
   bodyPart?: string;
   isWarmup?: boolean;
+  isActive?: boolean;
+  hasVideo?: boolean;
   sortBy?: 'name' | 'met' | 'createdAt';
   sortOrder?: 'ASC' | 'DESC';
 };
@@ -327,8 +329,11 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
     const limit = params.limit || 10;
     const search = params.search?.toLowerCase().trim();
     const all = getMockExercises().filter((exercise) => {
-      if (!search) return true;
-      return exercise.name.toLowerCase().includes(search);
+      if (search && !exercise.name.toLowerCase().includes(search)) return false;
+      if (params.isWarmup !== undefined && Boolean(exercise.isWarmup) !== params.isWarmup) return false;
+      if (params.isActive !== undefined && (exercise.isActive !== false) !== params.isActive) return false;
+      if (params.hasVideo !== undefined && Boolean(exercise.videoUrl) !== params.hasVideo) return false;
+      return true;
     });
     const start = (page - 1) * limit;
     return {
@@ -342,6 +347,7 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
   const data = await request<ExerciseListResponse | Exercise[] | { data?: ExerciseListResponse | Exercise[] }>(withQuery('/exercises', {
     page: params.page || 1,
     limit: params.limit || 10,
+    includeInactive: true,
     search: params.search,
     muscleGroup: params.muscleGroup,
     equipment: params.equipment,
@@ -349,6 +355,8 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
     difficulty: params.difficulty,
     bodyPart: params.bodyPart,
     isWarmup: params.isWarmup,
+    isActive: params.isActive,
+    hasVideo: params.hasVideo,
     sortBy: params.sortBy || 'createdAt',
     sortOrder: params.sortOrder || 'DESC',
   }));

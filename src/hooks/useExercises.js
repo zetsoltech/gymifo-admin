@@ -93,14 +93,31 @@ export function useExerciseOptions(enabled = true) {
   });
 }
 
+const saveToastId = 'save-exercise';
+
 /** Create/update an exercise, then refresh the list. */
 export function useSaveExercise() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload) => saveExercise(payload),
+    // Keep a loading toast up while the request (and any media upload) runs.
+    onMutate: (payload) => {
+      const hasMedia = Boolean(payload.images?.length || payload.video);
+      toast.loading(
+        hasMedia ? 'Uploading media… this may take a moment.' : 'Saving exercise…',
+        { id: saveToastId, duration: Infinity },
+      );
+    },
     onSuccess: (_data, payload) => {
       queryClient.invalidateQueries({ queryKey: ['exercises'] });
-      toast.success(payload.id ? 'Exercise updated.' : 'Exercise created.');
+      toast.success(payload.id ? 'Exercise updated.' : 'Exercise created.', {
+        id: saveToastId,
+        duration: 4000,
+      });
+    },
+    onError: () => {
+      // Drop the loading toast; the error toast is shown globally by the mutation cache.
+      toast.dismiss(saveToastId);
     },
   });
 }

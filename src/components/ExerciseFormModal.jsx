@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Film, ImagePlus, Plus, X } from 'lucide-react';
 
 const ENVIRONMENTS = [
   { value: 'gym', label: 'Gym' },
@@ -90,6 +91,8 @@ function withCurrent(list, currentId, currentObj) {
 
 export function ExerciseFormModal({ exercise, lookups, onClose, onSave }) {
   const [form, setForm] = useState(emptyForm);
+  const [imageDragOver, setImageDragOver] = useState(false);
+  const [videoDragOver, setVideoDragOver] = useState(false);
   const imageInputRef = useRef(null);
   const videoInputRef = useRef(null);
 
@@ -139,6 +142,54 @@ export function ExerciseFormModal({ exercise, lookups, onClose, onSave }) {
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  // Object URLs so newly picked files render as real previews.
+  const imagePreviews = useMemo(
+    () => form.images.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [form.images],
+  );
+  useEffect(() => () => imagePreviews.forEach((item) => URL.revokeObjectURL(item.url)), [imagePreviews]);
+
+  const videoPreviewUrl = useMemo(
+    () => (form.video ? URL.createObjectURL(form.video) : ''),
+    [form.video],
+  );
+  useEffect(() => () => {
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+  }, [videoPreviewUrl]);
+
+  function addImages(fileList) {
+    const files = Array.from(fileList || []);
+    if (files.length) setForm((current) => ({ ...current, images: [...current.images, ...files] }));
+  }
+
+  function removeNewImage(index) {
+    setForm((current) => ({ ...current, images: current.images.filter((_, i) => i !== index) }));
+  }
+
+  function clearVideo() {
+    updateField('video', null);
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  }
+
+  function handleImageDrop(event) {
+    event.preventDefault();
+    setImageDragOver(false);
+    addImages(Array.from(event.dataTransfer.files || []).filter((file) => file.type.startsWith('image/')));
+  }
+
+  function handleVideoDrop(event) {
+    event.preventDefault();
+    setVideoDragOver(false);
+    const file = Array.from(event.dataTransfer.files || []).find((item) => item.type.startsWith('video/'));
+    if (file) updateField('video', file);
+  }
+
+  function formatSize(bytes) {
+    return bytes >= 1024 * 1024
+      ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
   }
 
   function toggleDeleteImage(url) {
@@ -373,26 +424,105 @@ export function ExerciseFormModal({ exercise, lookups, onClose, onSave }) {
 
             <div className="sm:col-span-2">
               <Label className="mb-1.5" htmlFor="exerciseImages">Images</Label>
-              <Input
+              <input
                 type="file"
                 id="exerciseImages"
                 ref={imageInputRef}
                 accept="image/*"
                 multiple
-                onChange={(event) => updateField('images', Array.from(event.target.files || []))}
+                hidden
+                onChange={(event) => {
+                  addImages(event.target.files);
+                  event.target.value = '';
+                }}
               />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => imageInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') imageInputRef.current?.click();
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setImageDragOver(true);
+                }}
+                onDragLeave={() => setImageDragOver(false)}
+                onDrop={handleImageDrop}
+                className={`rounded-lg border-2 border-dashed p-3 transition-colors ${
+                  imageDragOver ? 'border-primary bg-primary/10' : 'border-input hover:border-muted-foreground/60'
+                }`}
+              >
+                {imagePreviews.length === 0 ? (
+                  <div className="flex flex-col items-center gap-1.5 py-5 text-muted-foreground">
+                    <ImagePlus className="size-6" />
+                    <p className="text-sm">Drag &amp; drop images here, or click to browse</p>
+                    <p className="text-xs">Multiple images allowed · click a preview to view full size</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" onClick={(event) => event.stopPropagation()}>
+                    {imagePreviews.map(({ file, url }, index) => (
+                      <div key={url} className="relative overflow-hidden rounded-lg border">
+                        <img
+                          src={url}
+                          alt={file.name}
+                          title="Click to view full size"
+                          className="h-24 w-full cursor-zoom-in object-cover"
+                          onClick={() => window.open(url, '_blank')}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeNewImage(index)}
+                          aria-label={`Remove ${file.name}`}
+                          className="absolute right-1 top-1 rounded-full bg-background/80 p-1 text-foreground hover:bg-destructive hover:text-white"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                        <p className="truncate bg-background/80 px-1.5 py-1 text-[11px] text-muted-foreground">
+                          {file.name} · {formatSize(file.size)}
+                        </p>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      className="flex h-full min-h-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-muted-foreground hover:border-primary hover:text-primary"
+                    >
+                      <Plus className="size-5" />
+                      <span className="text-xs">Add more</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {existingImages.length > 0 && (
               <div className="sm:col-span-2">
                 <Label className="mb-1.5">Existing Images</Label>
-                <div className="grid gap-2 rounded-lg border p-2">
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {existingImages.map((url) => {
                     const marked = form.deleteImageUrls.includes(url);
                     return (
-                      <div className="flex items-center justify-between gap-3 text-sm" key={url}>
-                        <span className={`truncate ${marked ? 'text-destructive line-through' : 'text-muted-foreground'}`}>{url}</span>
-                        <Button type="button" size="sm" variant={marked ? 'outline' : 'destructive'} onClick={() => toggleDeleteImage(url)}>
+                      <div key={url} className={`relative overflow-hidden rounded-lg border ${marked ? 'border-destructive' : ''}`}>
+                        <img
+                          src={url}
+                          alt="Exercise"
+                          title="Click to view full size"
+                          className={`h-24 w-full cursor-zoom-in object-cover ${marked ? 'opacity-40' : ''}`}
+                          onClick={() => window.open(url, '_blank')}
+                        />
+                        {marked && (
+                          <span className="absolute inset-x-0 top-1 text-center text-[11px] font-semibold text-destructive">
+                            Will be deleted
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={marked ? 'outline' : 'destructive'}
+                          className="absolute bottom-1 right-1 h-6 px-2 text-[11px]"
+                          onClick={() => toggleDeleteImage(url)}
+                        >
                           {marked ? 'Keep' : 'Delete'}
                         </Button>
                       </div>
@@ -406,29 +536,83 @@ export function ExerciseFormModal({ exercise, lookups, onClose, onSave }) {
               <Label className="mb-1.5" htmlFor="exerciseVideo">
                 Video File (stored at original quality - no compression)
               </Label>
-              <Input
+              <input
                 type="file"
                 id="exerciseVideo"
                 ref={videoInputRef}
                 accept="video/*"
+                hidden
                 onChange={(event) => updateField('video', event.target.files?.[0] || null)}
               />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => videoInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') videoInputRef.current?.click();
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setVideoDragOver(true);
+                }}
+                onDragLeave={() => setVideoDragOver(false)}
+                onDrop={handleVideoDrop}
+                className={`rounded-lg border-2 border-dashed p-3 transition-colors ${
+                  videoDragOver ? 'border-primary bg-primary/10' : 'border-input hover:border-muted-foreground/60'
+                }`}
+              >
+                {!form.video ? (
+                  <div className="flex flex-col items-center gap-1.5 py-5 text-muted-foreground">
+                    <Film className="size-6" />
+                    <p className="text-sm">Drag &amp; drop a video here, or click to browse</p>
+                    <p className="text-xs">One video · preview plays before saving</p>
+                  </div>
+                ) : (
+                  <div className="relative flex items-start gap-3" onClick={(event) => event.stopPropagation()}>
+                    <video src={videoPreviewUrl} controls preload="metadata" className="h-28 w-44 shrink-0 rounded-md bg-black object-contain" />
+                    <div className="min-w-0 flex-1 pt-1">
+                      <p className="truncate pr-8 text-sm font-medium">{form.video.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatSize(form.video.size)} · new upload</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearVideo}
+                      aria-label="Remove video"
+                      className="absolute right-0 top-0 rounded-full bg-background/80 p-1 text-foreground hover:bg-destructive hover:text-white"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
               <p className="mt-1.5 text-xs text-muted-foreground">Uploading a new video replaces the current video on update.</p>
             </div>
 
             {hasExistingVideo && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
-                <span className={`truncate text-sm ${form.deleteVideoUrl ? 'text-destructive line-through' : 'text-muted-foreground'}`}>
-                  {full.videoUrl}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={form.deleteVideoUrl ? 'outline' : 'destructive'}
-                  onClick={() => updateField('deleteVideoUrl', form.deleteVideoUrl ? '' : full.videoUrl)}
-                >
-                  {form.deleteVideoUrl ? 'Keep Video' : 'Delete Video'}
-                </Button>
+              <div className="flex items-start gap-3 rounded-lg border p-2 sm:col-span-2">
+                <video
+                  src={full.videoUrl}
+                  controls
+                  preload="metadata"
+                  className={`h-28 w-44 shrink-0 rounded-md bg-black object-contain ${form.deleteVideoUrl ? 'opacity-40' : ''}`}
+                />
+                <div className="min-w-0 flex-1 pt-1">
+                  <p className="text-sm font-medium">
+                    Current video
+                    {form.deleteVideoUrl && <span className="text-destructive"> — will be deleted</span>}
+                    {!form.deleteVideoUrl && form.video && <span className="text-muted-foreground"> — will be replaced</span>}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{full.videoUrl}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={form.deleteVideoUrl ? 'outline' : 'destructive'}
+                    className="mt-2"
+                    onClick={() => updateField('deleteVideoUrl', form.deleteVideoUrl ? '' : full.videoUrl)}
+                  >
+                    {form.deleteVideoUrl ? 'Keep Video' : 'Delete Video'}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

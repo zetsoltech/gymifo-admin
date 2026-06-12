@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { login } from '../api.ts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,11 +9,14 @@ import { Label } from '@/components/ui/label';
 export function LoginPage({ onLogin, showToast }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
       await login(email.trim(), password);
@@ -21,6 +25,8 @@ export function LoginPage({ onLogin, showToast }) {
       const message = err.message || 'Invalid credentials';
       setError(message);
       showToast(message, 'error');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -48,20 +54,34 @@ export function LoginPage({ onLogin, showToast }) {
           />
 
           <Label className="mb-1.5 mt-3.5" htmlFor="password">Password</Label>
-          <Input
-            type="password"
-            id="password"
-            placeholder="Password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
+          <div className="relative">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              placeholder="Password"
+              className="pr-10"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((value) => !value)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
 
           <Button
             type="submit"
             className="mt-[22px] w-full"
+            disabled={loading}
           >
-            Sign In
+            {loading && <Loader2 className="animate-spin" />}
+            {loading ? 'Signing In...' : 'Sign In'}
           </Button>
           {error && <p className="mt-3 text-center text-[13px] text-destructive">{error}</p>}
         </form>

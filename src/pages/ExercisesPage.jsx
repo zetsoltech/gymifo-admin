@@ -74,6 +74,9 @@ export function ExercisesPage({ showToast }) {
     type: '',
     difficulty: '',
     bodyPart: '',
+    warmup: '',
+    status: '',
+    video: '',
   });
   const [page, setPage] = useState(1);
   const [editingExercise, setEditingExercise] = useState(null);
@@ -95,6 +98,9 @@ export function ExercisesPage({ showToast }) {
     type: filters.type,
     difficulty: filters.difficulty,
     bodyPart: filters.bodyPart,
+    isWarmup: filters.warmup === '' ? undefined : filters.warmup === 'true',
+    isActive: filters.status === '' ? undefined : filters.status === 'active',
+    hasVideo: filters.video === '' ? undefined : filters.video === 'with',
   };
 
   const exercisesQuery = useExercisesQuery(queryParams);
@@ -107,7 +113,13 @@ export function ExercisesPage({ showToast }) {
   // Show skeletons on first load AND while a new page is being fetched
   // (placeholder data = the previous page still showing while the next loads).
   const isLoading = exercisesQuery.isPending || exercisesQuery.isPlaceholderData;
-  const exercises = useMemo(() => toArray(data?.exercises).map(normalizeExercise), [data]);
+  // Active rows first; inactive sink to the bottom (stable sort keeps API order within each group).
+  const exercises = useMemo(
+    () => toArray(data?.exercises)
+      .map(normalizeExercise)
+      .sort((a, b) => Number(a.isActive === false) - Number(b.isActive === false)),
+    [data],
+  );
   const total = Number(data?.total ?? exercises.length);
   const meta = { total, page: data?.page || page, limit: data?.limit || pageSize };
   const totalPages = Math.max(1, Math.ceil(meta.total / meta.limit));
@@ -187,7 +199,7 @@ export function ExercisesPage({ showToast }) {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Select value={filters.muscleGroup || allValue} onValueChange={(value) => updateFilter('muscleGroup', value)}>
           <SelectTrigger className="w-full"><SelectValue placeholder="Muscle group" /></SelectTrigger>
           <SelectContent>
@@ -228,6 +240,30 @@ export function ExercisesPage({ showToast }) {
           <SelectContent>
             <SelectItem value={allValue}>All body parts</SelectItem>
             {bodyParts.map((item) => <SelectItem key={item.id} value={item.key}>{item.value}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filters.warmup || allValue} onValueChange={(value) => updateFilter('warmup', value)}>
+          <SelectTrigger className="w-full"><SelectValue placeholder="Warmup" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={allValue}>Warmup &amp; regular</SelectItem>
+            <SelectItem value="true">Warmup only</SelectItem>
+            <SelectItem value="false">Non-warmup only</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filters.status || allValue} onValueChange={(value) => updateFilter('status', value)}>
+          <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={allValue}>All statuses</SelectItem>
+            <SelectItem value="active">Active only</SelectItem>
+            <SelectItem value="inactive">Inactive only</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filters.video || allValue} onValueChange={(value) => updateFilter('video', value)}>
+          <SelectTrigger className="w-full"><SelectValue placeholder="Video" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={allValue}>With &amp; without video</SelectItem>
+            <SelectItem value="with">With video</SelectItem>
+            <SelectItem value="without">Without video</SelectItem>
           </SelectContent>
         </Select>
       </div>
