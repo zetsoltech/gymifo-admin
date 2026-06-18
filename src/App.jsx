@@ -4,6 +4,7 @@ import { isAuthenticated, logout } from './api.ts';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { DashboardPage } from './pages/DashboardPage.jsx';
 import { ExercisesPage } from './pages/ExercisesPage.jsx';
+import { RecipesPage } from './pages/RecipesPage.jsx';
 import { TopNav } from './components/TopNav.jsx';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -45,6 +46,7 @@ export default function App() {
       <main className="mx-auto w-[min(90vw,1800px)] px-4 py-6 sm:px-6 lg:px-8">
         {activePage === 'dashboard' && <DashboardPage />}
         {activePage === 'exercises' && <ExercisesPage showToast={showToast} />}
+        {activePage === 'recipes' && <RecipesPage showToast={showToast} />}
       </main>
       <Toaster richColors position="top-right" />
     </div>

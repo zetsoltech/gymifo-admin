@@ -3,6 +3,7 @@ const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
 const ACCEPT_LANGUAGE = import.meta.env.VITE_ACCEPT_LANGUAGE || 'en';
 
 const STORAGE_KEY = 'gymifo_exercises';
+const RECIPES_STORAGE_KEY = 'gymifo_recipes';
 const TOKEN_KEY = 'gymifo_token';
 const REFRESH_TOKEN_KEY = 'gymifo_refresh_token';
 const USER_EMAIL_KEY = 'gymifo_admin_email';
@@ -103,6 +104,86 @@ export type SaveExercisePayload = {
   deleteImageUrls?: string[];
 };
 
+// ─── Recipe Types ────────────────────────────────────────────────────────────
+
+export type Recipe = {
+  id: string | number;
+  name: string;
+  description?: string;
+  mealType?: LookupRef | string;
+  cuisine?: LookupRef | string;
+  dietType?: LookupRef | string;
+  difficultyLevel?: LookupRef | string;
+  prepTimeMinutes?: number;
+  cookTimeMinutes?: number;
+  servings?: number;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  imageUrls?: string[];
+  videoUrl?: string;
+  ingredients?: string[];
+  ingredientsData?: { id?: string; quantity?: string | number | null; unit?: string; name: string }[];
+  instructions?: string[];
+  tips?: string[];
+  isActive?: boolean;
+  createdAt?: string;
+  _id?: string;
+  mealTypeId?: string;
+  cuisineId?: string;
+  dietTypeId?: string;
+  difficultyLevelId?: string;
+};
+
+export type ListRecipesParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  mealType?: string;
+  cuisine?: string;
+  dietType?: string;
+  difficulty?: string;
+  isActive?: boolean;
+  hasVideo?: boolean;
+  sortBy?: 'name' | 'calories' | 'createdAt';
+  sortOrder?: 'ASC' | 'DESC';
+};
+
+export type RecipeListResponse = {
+  recipes: Recipe[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type SaveRecipePayload = {
+  id?: string | number;
+  name: string;
+  description?: string;
+  mealTypeId?: string;
+  cuisineId?: string;
+  dietTypeId?: string;
+  difficultyLevelId?: string;
+  prepTimeMinutes?: number | string;
+  cookTimeMinutes?: number | string;
+  servings?: number | string;
+  calories?: number | string;
+  protein?: number | string;
+  carbs?: number | string;
+  fat?: number | string;
+  isActive?: boolean;
+  ingredients?: (string | { quantity?: string | number | null; unit?: string; name: string })[];
+  instructions?: string[];
+  tips?: string[];
+  images?: File[];
+  video?: File | null;
+  deleteVideoUrl?: string;
+  deleteImageUrls?: string[];
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type DashboardPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 type LoginResponse = {
@@ -136,6 +217,25 @@ const mockLookups: Lookup[] = [
   { id: 'diff-advanced', category: 'difficulty_level', key: 'advanced', value: 'Advanced', status: 'active' },
   { id: 'bp-chest', category: 'body_part', key: 'chest', value: 'Chest', status: 'active' },
   { id: 'bp-back', category: 'body_part', key: 'back', value: 'Back', status: 'active' },
+  
+  // Recipe Lookups
+  { id: 'breakfast', category: 'meal_type', key: 'breakfast', value: 'Breakfast', status: 'active' },
+  { id: 'lunch', category: 'meal_type', key: 'lunch', value: 'Lunch', status: 'active' },
+  { id: 'dinner', category: 'meal_type', key: 'dinner', value: 'Dinner', status: 'active' },
+  { id: 'snack', category: 'meal_type', key: 'snack', value: 'Snack', status: 'active' },
+  { id: 'american', category: 'cuisine_type', key: 'american', value: 'American', status: 'active' },
+  { id: 'mediterranean', category: 'cuisine_type', key: 'mediterranean', value: 'Mediterranean', status: 'active' },
+  { id: 'asian', category: 'cuisine_type', key: 'asian', value: 'Asian', status: 'active' },
+  { id: 'italian', category: 'cuisine_type', key: 'italian', value: 'Italian', status: 'active' },
+  { id: 'mexican', category: 'cuisine_type', key: 'mexican', value: 'Mexican', status: 'active' },
+  { id: 'high-protein', category: 'diet_type', key: 'high-protein', value: 'High Protein', status: 'active' },
+  { id: 'vegan', category: 'diet_type', key: 'vegan', value: 'Vegan', status: 'active' },
+  { id: 'keto', category: 'diet_type', key: 'keto', value: 'Keto', status: 'active' },
+  { id: 'low-carb', category: 'diet_type', key: 'low-carb', value: 'Low Carb', status: 'active' },
+  { id: 'vegetarian', category: 'diet_type', key: 'vegetarian', value: 'Vegetarian', status: 'active' },
+  { id: 'beginner', category: 'recipe_difficulty', key: 'beginner', value: 'Beginner', status: 'active' },
+  { id: 'intermediate', category: 'recipe_difficulty', key: 'intermediate', value: 'Intermediate', status: 'active' },
+  { id: 'advanced', category: 'recipe_difficulty', key: 'advanced', value: 'Advanced', status: 'active' },
 ];
 
 const seedExercises: Exercise[] = [
@@ -199,6 +299,41 @@ function getMockExercises(): Exercise[] {
 
 function saveMockExercises(exercises: Exercise[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(exercises));
+}
+
+const seedRecipes: Recipe[] = [
+  {
+    id: 1,
+    name: 'Grilled Chicken & Quinoa Bowl',
+    description: 'A high-protein meal perfect for post-workout recovery.',
+    mealType: { id: 'lunch', key: 'lunch', value: 'Lunch' },
+    cuisine: { id: 'american', key: 'american', value: 'American' },
+    dietType: { id: 'high-protein', key: 'high-protein', value: 'High Protein' },
+    difficultyLevel: { id: 'beginner', key: 'beginner', value: 'Beginner' },
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 20,
+    servings: 2,
+    calories: 480,
+    protein: 42,
+    carbs: 38,
+    fat: 14,
+    imageUrls: [],
+    videoUrl: '',
+    ingredients: ['200g chicken breast', '100g quinoa', '1 cup broccoli', 'olive oil', 'salt & pepper'],
+    instructions: ['Season chicken and grill for 6 min each side.', 'Cook quinoa per packet instructions.', 'Steam broccoli 5 min.', 'Combine and serve.'],
+    tips: ['Rest chicken 3 min before slicing.'],
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+function getMockRecipes(): Recipe[] {
+  const saved = localStorage.getItem(RECIPES_STORAGE_KEY);
+  return saved ? JSON.parse(saved) as Recipe[] : seedRecipes;
+}
+
+function saveMockRecipes(recipes: Recipe[]): void {
+  localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(recipes));
 }
 
 function normalizeErrorMessage(payload: RequestErrorPayload | null): string {
@@ -326,7 +461,7 @@ export async function getExercise(id: string | number): Promise<Exercise> {
 export async function listExercises(params: ListExercisesParams = {}): Promise<ExerciseListResponse> {
   if (USE_MOCK_API) {
     const page = params.page || 1;
-    const limit = params.limit || 10;
+    const limit = params.limit || 12;
     const search = params.search?.toLowerCase().trim();
     const all = getMockExercises().filter((exercise) => {
       if (search && !exercise.name.toLowerCase().includes(search)) return false;
@@ -346,7 +481,7 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
 
   const data = await request<ExerciseListResponse | Exercise[] | { data?: ExerciseListResponse | Exercise[] }>(withQuery('/exercises', {
     page: params.page || 1,
-    limit: params.limit || 10,
+    limit: params.limit || 12,
     includeInactive: true,
     search: params.search,
     muscleGroup: params.muscleGroup,
@@ -390,7 +525,7 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
     exercises,
     total: Number(response.total ?? exercises.length),
     page: Number(response.page ?? params.page ?? 1),
-    limit: Number(response.limit ?? params.limit ?? 10),
+    limit: Number(response.limit ?? params.limit ?? 12),
   };
 }
 
@@ -479,7 +614,7 @@ export async function saveExercise(payload: SaveExercisePayload): Promise<{ ok: 
   if (payload.deleteVideoUrl) formData.append('deleteVideoUrl', payload.deleteVideoUrl);
 
   return request(payload.id ? `/exercises/${payload.id}` : '/exercises', {
-    method: payload.id ? 'PATCH' : 'POST',
+    method: payload.id ? 'PUT' : 'POST',
     body: formData,
   });
 }
@@ -508,6 +643,394 @@ export async function setExerciseActive(id: string | number, isActive: boolean):
   formData.append('isActive', String(isActive));
   return request(`/exercises/${id}`, { method: 'PATCH', body: formData });
 }
+
+// ─── Recipes API ─────────────────────────────────────────────────────────────
+
+export function parseIngredientLine(line: string) {
+  line = line.trim();
+  const regex = /^(\d+(?:\/\d+)?(?:\s+\d+\/\d+)?|\d+\.\d+|\d+)\s*(g|ml|cup|cups|tbsp|tsp|oz|pcs|piece|pieces|slice|slices|can|cans|pinch|pinches|g\b|ml\b)?\s+(.*)$/i;
+  const match = line.match(regex);
+  if (match) {
+    const qtyStr = match[1];
+    let quantity = parseFloat(qtyStr);
+    if (qtyStr.includes('/')) {
+      const parts = qtyStr.split(/\s+/);
+      if (parts.length === 2) {
+        const integerPart = parseFloat(parts[0]);
+        const fracParts = parts[1].split('/');
+        quantity = integerPart + parseFloat(fracParts[0]) / parseFloat(fracParts[1]);
+      } else {
+        const fracParts = parts[0].split('/');
+        quantity = parseFloat(fracParts[0]) / parseFloat(fracParts[1]);
+      }
+    }
+    return {
+      quantity: isNaN(quantity) ? '' : String(quantity),
+      unit: match[2] ? match[2].toLowerCase() : 'pcs',
+      name: match[3].trim()
+    };
+  }
+  return {
+    quantity: '',
+    unit: 'pcs',
+    name: line
+  };
+}
+
+export function normalizeRecipe(recipe: any): Recipe {
+  if (!recipe) return recipe;
+  const videoUrl = recipe.videoUrl ?? recipe.video_url ?? recipe.videoPath ?? recipe.video_path ?? '';
+  const imageUrls = recipe.imageUrls || (recipe.imageUrl ? [recipe.imageUrl] : []);
+  
+  let ingredients = [];
+  let ingredientsData: { id?: string; quantity?: string | number | null; unit?: string; name: string }[] = [];
+  if (Array.isArray(recipe.ingredients)) {
+    const isObjectList = recipe.ingredients.length > 0 && typeof recipe.ingredients[0] === 'object';
+    if (isObjectList) {
+      ingredientsData = recipe.ingredients.map((item: any) => ({
+        id: item.id,
+        name: item.name || '',
+        quantity: item.quantity !== null && item.quantity !== undefined ? String(item.quantity) : '',
+        unit: item.unit || ''
+      }));
+      ingredients = recipe.ingredients.map((item: any) => {
+        const qty = item.quantity ?? '';
+        const unit = item.unit ?? '';
+        const name = item.name ?? '';
+        return `${qty}${unit ? ' ' + unit : ''} ${name}`.trim().replace(/\s+/g, ' ');
+      }).filter(Boolean);
+    } else {
+      ingredients = recipe.ingredients;
+      ingredientsData = recipe.ingredients.map((line: string) => parseIngredientLine(line));
+    }
+  }
+
+  let instructions = [];
+  if (Array.isArray(recipe.instructions)) {
+    instructions = recipe.instructions.map((item: any) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') return item.step || '';
+      return '';
+    }).filter(Boolean);
+  } else if (recipe.instructions && Array.isArray(recipe.instructions.steps)) {
+    instructions = recipe.instructions.steps;
+  }
+
+  const mealTypeId = recipe.mealTypeId || (typeof recipe.mealTypeLookup === 'object' ? recipe.mealTypeLookup?.id : undefined) || (typeof recipe.mealType === 'object' ? recipe.mealType?.id : recipe.mealType);
+  const cuisineId = recipe.cuisineTypeId || recipe.cuisineId || (typeof recipe.cuisineTypeLookup === 'object' ? recipe.cuisineTypeLookup?.id : undefined) || (typeof recipe.cuisineLookup === 'object' ? recipe.cuisineLookup?.id : undefined) || (typeof recipe.cuisineType === 'object' ? recipe.cuisineType?.id : undefined) || (typeof recipe.cuisine === 'object' ? recipe.cuisine?.id : recipe.cuisine);
+  const dietTypeId = recipe.dietTypeId || (typeof recipe.dietType === 'object' ? recipe.dietType?.id : recipe.dietType);
+  const difficultyLevelId = recipe.difficultyId || recipe.difficultyLevelId || (typeof recipe.difficultyLookup === 'object' ? recipe.difficultyLookup?.id : undefined) || (typeof recipe.difficultyLevel === 'object' ? recipe.difficultyLevel?.id : recipe.difficultyLevel);
+
+  return {
+    ...recipe,
+    id: recipe.id ?? recipe._id,
+    name: recipe.name ?? recipe.recipeName ?? recipe.title ?? '',
+    description: recipe.description || '',
+    mealType: recipe.mealTypeLookup || recipe.mealType || '',
+    cuisine: recipe.cuisineTypeLookup || recipe.cuisineLookup || recipe.cuisineType || recipe.cuisine || '',
+    dietType: recipe.dietTypeLookup || recipe.dietType || '',
+    difficultyLevel: recipe.difficultyLookup || recipe.difficulty || recipe.difficultyLevel || '',
+    mealTypeId,
+    cuisineId,
+    dietTypeId,
+    difficultyLevelId,
+    prepTimeMinutes: recipe.prepTimeMinutes ?? recipe.prepTime ?? null,
+    cookTimeMinutes: recipe.cookTimeMinutes ?? null,
+    servings: recipe.servings ?? null,
+    calories: recipe.calories ?? null,
+    protein: recipe.protein ?? null,
+    carbs: recipe.carbs ?? null,
+    fat: recipe.fat ?? null,
+    videoUrl,
+    imageUrls,
+    ingredients,
+    ingredientsData,
+    instructions,
+    tips: recipe.tips || [],
+  };
+}
+
+export async function getRecipe(id: string | number): Promise<Recipe> {
+  if (USE_MOCK_API) {
+    const found = getMockRecipes().find((item) => String(item.id) === String(id));
+    if (!found) throw new Error('Recipe not found');
+    return normalizeRecipe(found);
+  }
+  const raw = await request<Recipe>(`/recipes/${id}`);
+  return normalizeRecipe(raw);
+}
+
+export async function listRecipes(params: ListRecipesParams = {}): Promise<RecipeListResponse> {
+  if (USE_MOCK_API) {
+    const page = params.page || 1;
+    const limit = params.limit || 12;
+    const search = params.search?.toLowerCase().trim();
+    const matchesLookupFilter = (lookup: LookupRef | string | undefined, value: string) => {
+      if (!value) return true;
+      if (!lookup) return false;
+      if (typeof lookup === 'string') return lookup === value;
+      return lookup.id === value || lookup.key === value;
+    };
+    const all = getMockRecipes().filter((recipe) => {
+      if (search && !recipe.name.toLowerCase().includes(search)) return false;
+      if (params.isActive !== undefined && (recipe.isActive !== false) !== params.isActive) return false;
+      if (params.hasVideo !== undefined && Boolean(recipe.videoUrl) !== params.hasVideo) return false;
+      
+      if (params.mealType && !matchesLookupFilter(recipe.mealType, params.mealType)) return false;
+      if (params.cuisine && !matchesLookupFilter(recipe.cuisine, params.cuisine)) return false;
+      if (params.dietType && !matchesLookupFilter(recipe.dietType, params.dietType)) return false;
+      if (params.difficulty && !matchesLookupFilter(recipe.difficultyLevel, params.difficulty)) return false;
+      
+      return true;
+    });
+    const start = (page - 1) * limit;
+    return { recipes: all.slice(start, start + limit).map(normalizeRecipe), total: all.length, page, limit };
+  }
+
+  const data = await request<RecipeListResponse | Recipe[] | { data?: RecipeListResponse | Recipe[] }>(withQuery('/recipes', {
+    page: params.page || 1,
+    limit: params.limit || 12,
+    includeInactive: true,
+    search: params.search,
+    mealType: params.mealType,
+    cuisine: params.cuisine,
+    dietType: params.dietType,
+    difficulty: params.difficulty,
+    isActive: params.isActive,
+    hasVideo: params.hasVideo,
+    sortBy: params.sortBy || 'createdAt',
+    sortOrder: params.sortOrder || 'DESC',
+  }));
+
+  if (Array.isArray(data)) {
+    return { recipes: data.map(normalizeRecipe), total: data.length, page: params.page || 1, limit: params.limit || data.length || 10 };
+  }
+
+  const nested = (data as { data?: RecipeListResponse | Recipe[] }).data;
+  if (Array.isArray(nested)) {
+    return { recipes: nested.map(normalizeRecipe), total: nested.length, page: params.page || 1, limit: params.limit || nested.length || 10 };
+  }
+
+  const response = (nested && !Array.isArray(nested) ? nested : data) as Partial<RecipeListResponse> & {
+    items?: Recipe[];
+    results?: Recipe[];
+    rows?: Recipe[];
+  };
+  const recipes = asArray<Recipe>(response.recipes || response.items || response.results || response.rows);
+  return {
+    recipes: recipes.map(normalizeRecipe),
+    total: Number(response.total ?? recipes.length),
+    page: Number(response.page ?? params.page ?? 1),
+    limit: Number(response.limit ?? params.limit ?? 12),
+  };
+}
+
+export async function saveRecipe(payload: SaveRecipePayload): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    const recipes = getMockRecipes();
+    const videoUrl = payload.video ? URL.createObjectURL(payload.video) : '';
+
+    const mealType = mockLookups.find((l) => l.id === payload.mealTypeId);
+    const cuisine = mockLookups.find((l) => l.id === payload.cuisineId);
+    const dietType = mockLookups.find((l) => l.id === payload.dietTypeId);
+    const difficultyLevel = mockLookups.find((l) => l.id === payload.difficultyLevelId);
+
+    if (payload.id) {
+      const existing = recipes.find((item) => String(item.id) === String(payload.id));
+      if (!existing) throw new Error('Recipe not found');
+      existing.name = payload.name;
+      if (payload.description !== undefined) existing.description = payload.description;
+      if (payload.mealTypeId !== undefined) {
+        existing.mealTypeId = payload.mealTypeId;
+        existing.mealType = mealType ? { id: mealType.id, key: mealType.key, value: mealType.value } : payload.mealTypeId;
+      }
+      if (payload.cuisineId !== undefined) {
+        existing.cuisineId = payload.cuisineId;
+        existing.cuisine = cuisine ? { id: cuisine.id, key: cuisine.key, value: cuisine.value } : payload.cuisineId;
+      }
+      if (payload.dietTypeId !== undefined) {
+        existing.dietTypeId = payload.dietTypeId;
+        existing.dietType = dietType ? { id: dietType.id, key: dietType.key, value: dietType.value } : payload.dietTypeId;
+      }
+      if (payload.difficultyLevelId !== undefined) {
+        existing.difficultyLevelId = payload.difficultyLevelId;
+        existing.difficultyLevel = difficultyLevel ? { id: difficultyLevel.id, key: difficultyLevel.key, value: difficultyLevel.value } : payload.difficultyLevelId;
+      }
+      if (payload.prepTimeMinutes !== undefined) existing.prepTimeMinutes = Number(payload.prepTimeMinutes);
+      if (payload.cookTimeMinutes !== undefined) existing.cookTimeMinutes = Number(payload.cookTimeMinutes);
+      if (payload.servings !== undefined) existing.servings = Number(payload.servings);
+      if (payload.calories !== undefined) existing.calories = Number(payload.calories);
+      if (payload.protein !== undefined) existing.protein = Number(payload.protein);
+      if (payload.carbs !== undefined) existing.carbs = Number(payload.carbs);
+      if (payload.fat !== undefined) existing.fat = Number(payload.fat);
+      if (payload.ingredients !== undefined) existing.ingredients = payload.ingredients as string[];
+      if (payload.instructions !== undefined) existing.instructions = payload.instructions;
+      if (payload.tips !== undefined) existing.tips = payload.tips;
+      if (payload.isActive !== undefined) existing.isActive = payload.isActive;
+      if (videoUrl) existing.videoUrl = videoUrl;
+      if (payload.deleteVideoUrl) existing.videoUrl = '';
+    } else {
+      const newId = recipes.length ? Math.max(...recipes.map((item) => Number(item.id))) + 1 : 1;
+      recipes.push({
+        id: newId,
+        name: payload.name,
+        description: payload.description,
+        mealTypeId: payload.mealTypeId,
+        mealType: mealType ? { id: mealType.id, key: mealType.key, value: mealType.value } : payload.mealTypeId,
+        cuisineId: payload.cuisineId,
+        cuisine: cuisine ? { id: cuisine.id, key: cuisine.key, value: cuisine.value } : payload.cuisineId,
+        dietTypeId: payload.dietTypeId,
+        dietType: dietType ? { id: dietType.id, key: dietType.key, value: dietType.value } : payload.dietTypeId,
+        difficultyLevelId: payload.difficultyLevelId,
+        difficultyLevel: difficultyLevel ? { id: difficultyLevel.id, key: difficultyLevel.key, value: difficultyLevel.value } : payload.difficultyLevelId,
+        prepTimeMinutes: payload.prepTimeMinutes ? Number(payload.prepTimeMinutes) : undefined,
+        cookTimeMinutes: payload.cookTimeMinutes ? Number(payload.cookTimeMinutes) : undefined,
+        servings: payload.servings ? Number(payload.servings) : undefined,
+        calories: payload.calories ? Number(payload.calories) : undefined,
+        protein: payload.protein ? Number(payload.protein) : undefined,
+        carbs: payload.carbs ? Number(payload.carbs) : undefined,
+        fat: payload.fat ? Number(payload.fat) : undefined,
+        ingredients: payload.ingredients,
+        instructions: payload.instructions,
+        tips: payload.tips || [],
+        videoUrl,
+        imageUrls: [],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    saveMockRecipes(recipes);
+    return { ok: true };
+  }
+
+  const isUpdate = Boolean(payload.id);
+  const formData = new FormData();
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const appendField = (key: string, value: unknown) => {
+    if (value !== undefined && value !== null && value !== '') {
+      formData.append(key, String(value));
+    }
+  };
+
+  // ── name is always required (both POST create and PUT update) ────────────
+  if (payload.name) {
+    formData.append('name', payload.name);
+  }
+
+  // Ingredients — only send if provided (non-empty list with at least one named item)
+  const hasIngredients = (payload.ingredients || []).some((i) =>
+    typeof i === 'object' ? (i as { name?: string }).name?.trim() : String(i).trim(),
+  );
+  if (!isUpdate || hasIngredients) {
+    const ingredientsParsed = (payload.ingredients || []).map((line) => {
+      if (line && typeof line === 'object') {
+        const qtyVal = parseFloat(String((line as { quantity?: unknown }).quantity));
+        return {
+          quantity: isNaN(qtyVal) ? 1 : qtyVal,
+          unit: (line as { unit?: string }).unit || 'pcs',
+          name: ((line as { name?: string }).name || '').trim(),
+        };
+      }
+      const lineStr = String(line || '').trim();
+      const regex = /^(\d+(?:\/\d+)?(?:\s+\d+\/\d+)?|\d+\.\d+|\d+)\s*(g|ml|cup|cups|tbsp|tsp|oz|pcs|piece|pieces|slice|slices|can|cans|pinch|pinches|g\b|ml\b)?\s+(.*)$/i;
+      const match = lineStr.match(regex);
+      if (match) {
+        const qtyStr = match[1];
+        let quantity = parseFloat(qtyStr);
+        if (qtyStr.includes('/')) {
+          const parts = qtyStr.split(/\s+/);
+          if (parts.length === 2) {
+            const intPart = parseFloat(parts[0]);
+            const frac = parts[1].split('/');
+            quantity = intPart + parseFloat(frac[0]) / parseFloat(frac[1]);
+          } else {
+            const frac = parts[0].split('/');
+            quantity = parseFloat(frac[0]) / parseFloat(frac[1]);
+          }
+        }
+        return {
+          quantity: isNaN(quantity) ? 1 : quantity,
+          unit: match[2] ? match[2].toLowerCase() : 'pcs',
+          name: match[3].trim(),
+        };
+      }
+      return { quantity: 1, unit: 'pcs', name: lineStr };
+    });
+    formData.append('ingredients', JSON.stringify(ingredientsParsed));
+  }
+
+  // Instructions — only send if provided
+  const hasInstructions = (payload.instructions || []).some((s) => String(s).trim());
+  if (!isUpdate || hasInstructions) {
+    formData.append('instructions', JSON.stringify({ steps: payload.instructions || [] }));
+  }
+
+  // Optional scalar fields — only appended when non-empty
+  appendField('description', payload.description);
+  appendField('mealTypeId', payload.mealTypeId);
+  appendField('cuisineTypeId', payload.cuisineId);
+  appendField('dietTypeId', payload.dietTypeId);
+  appendField('difficultyId', payload.difficultyLevelId);
+  appendField('prepTime', payload.prepTimeMinutes);
+  appendField('cookTime', payload.cookTimeMinutes);
+  appendField('servings', payload.servings);
+  appendField('calories', payload.calories);
+  appendField('protein', payload.protein);
+  appendField('carbs', payload.carbs);
+  appendField('fat', payload.fat);
+
+  if (payload.isActive !== undefined) {
+    formData.append('isActive', String(payload.isActive));
+  }
+
+  // Image — only send when a new file is attached or deletion is requested
+  if (payload.images && payload.images.length > 0) {
+    formData.append('image', payload.images[0]);
+  }
+  if (payload.deleteImageUrls && payload.deleteImageUrls.length > 0) {
+    formData.append('deleteImage', 'true');
+  }
+
+  // Video — only send when a new file is attached or deletion is requested
+  if (payload.video) {
+    formData.append('video', payload.video);
+  }
+  if (payload.deleteVideoUrl) {
+    formData.append('deleteVideo', 'true');
+  }
+
+  return request(payload.id ? `/recipes/${payload.id}` : '/recipes', {
+    method: payload.id ? 'PUT' : 'POST',
+    body: formData,
+  });
+}
+
+export async function deleteRecipe(id: string | number): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    saveMockRecipes(getMockRecipes().filter((item) => String(item.id) !== String(id)));
+    return { ok: true };
+  }
+  return request(`/recipes/${id}`, { method: 'DELETE' });
+}
+
+export async function setRecipeActive(id: string | number, isActive: boolean): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    const recipes = getMockRecipes();
+    const existing = recipes.find((item) => String(item.id) === String(id));
+    if (existing) {
+      existing.isActive = isActive;
+      saveMockRecipes(recipes);
+    }
+    return { ok: true };
+  }
+  const formData = new FormData();
+  formData.append('isActive', String(isActive));
+  return request(`/recipes/${id}`, { method: 'PATCH', body: formData });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function getDashboardOverview(period: DashboardPeriod = 'monthly'): Promise<unknown> {
   if (USE_MOCK_API) return mockDashboard.overview;

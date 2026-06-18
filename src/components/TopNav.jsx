@@ -41,6 +41,13 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
             >
               Exercise Videos
             </Button>
+            <Button
+              type="button"
+              variant={activePage === 'recipes' ? 'default' : 'ghost'}
+              onClick={() => onNavigate('recipes')}
+            >
+              Recipe Videos
+            </Button>
             <Button type="button" variant="ghost" disabled>
               Workouts
             </Button>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -304,6 +305,9 @@ export function ExerciseFormModal({ exercise, lookups, onClose, onSave }) {
       <DialogContent className="no-scrollbar max-h-[92vh] overflow-y-auto sm:max-w-[760px]">
         <DialogHeader>
           <DialogTitle>{exercise ? 'Edit Exercise' : 'Add Exercise'}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Provide the details to {exercise ? 'update the' : 'create a new'} exercise.
+          </DialogDescription>
         </DialogHeader>
 
         <form className="grid gap-4" onSubmit={handleSubmit}>

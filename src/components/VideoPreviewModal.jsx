@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -24,6 +25,9 @@ export function VideoPreviewModal({ exercise, onClose }) {
       <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{exercise.name}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Video preview for exercise {exercise.name}
+          </DialogDescription>
         </DialogHeader>
         <video ref={videoRef} controls src={exercise.videoUrl} className="w-full rounded-lg bg-black" />
         <DialogFooter>
