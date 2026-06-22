@@ -1,9 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
 const ACCEPT_LANGUAGE = import.meta.env.VITE_ACCEPT_LANGUAGE || 'en';
 
 const STORAGE_KEY = 'gymifo_exercises';
 const RECIPES_STORAGE_KEY = 'gymifo_recipes';
+const RECOMMENDATIONS_STORAGE_KEY = 'gymifo_recommendations';
 const TOKEN_KEY = 'gymifo_token';
 const REFRESH_TOKEN_KEY = 'gymifo_refresh_token';
 const USER_EMAIL_KEY = 'gymifo_admin_email';
@@ -182,6 +183,66 @@ export type SaveRecipePayload = {
   deleteImageUrls?: string[];
 };
 
+// ─── Exercise Recommendation Types ──────────────────────────────────────────
+
+export type RecommendationExerciseItem = {
+  id: string | number;
+  name: string;
+  videoUrl?: string;
+  imageUrls?: string[];
+};
+
+export type Recommendation = {
+  id: string | number;
+  name: string;
+  isRestDay?: boolean;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
+  muscleGroupIds?: string[];
+  muscleGroups?: string[];
+  exerciseIds?: string[];
+  exercises?: RecommendationExerciseItem[];
+  isActive?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  _id?: string;
+};
+
+export type ListRecommendationsParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  isRestDay?: boolean;
+  isActive?: boolean;
+  isDeleted?: boolean;
+  hasVideo?: boolean;
+  muscleGroupIds?: string[];
+};
+
+export type RecommendationListResponse = {
+  recommendations: Recommendation[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type SaveRecommendationPayload = {
+  id?: string | number;
+  name: string;
+  isRestDay?: boolean;
+  muscleGroupIds?: string[];
+  exerciseIds?: string[];
+  image?: File | null;
+  imageUrl?: string;
+  deleteImageUrl?: boolean;
+  video?: File | null;
+  videoUrl?: string;
+  deleteVideoUrl?: boolean;
+  isActive?: boolean;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type DashboardPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -327,6 +388,44 @@ const seedRecipes: Recipe[] = [
   },
 ];
 
+const seedRecommendations: Recommendation[] = [
+  {
+    id: 1,
+    name: 'Leg Day',
+    isRestDay: false,
+    imageUrl: null,
+    videoUrl: null,
+    muscleGroupIds: ['mg-legs'],
+    muscleGroups: ['Legs'],
+    exerciseIds: ['1'],
+    exercises: [
+      {
+        id: 1,
+        name: 'Barbell Bench Press',
+        videoUrl: '',
+        imageUrls: [],
+      },
+    ],
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 2,
+    name: 'Rest Day',
+    isRestDay: true,
+    imageUrl: null,
+    videoUrl: null,
+    muscleGroupIds: [],
+    muscleGroups: [],
+    exerciseIds: [],
+    exercises: [],
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
 function getMockRecipes(): Recipe[] {
   const saved = localStorage.getItem(RECIPES_STORAGE_KEY);
   return saved ? JSON.parse(saved) as Recipe[] : seedRecipes;
@@ -334,6 +433,15 @@ function getMockRecipes(): Recipe[] {
 
 function saveMockRecipes(recipes: Recipe[]): void {
   localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(recipes));
+}
+
+function getMockRecommendations(): Recommendation[] {
+  const saved = localStorage.getItem(RECOMMENDATIONS_STORAGE_KEY);
+  return saved ? JSON.parse(saved) as Recommendation[] : seedRecommendations;
+}
+
+function saveMockRecommendations(recommendations: Recommendation[]): void {
+  localStorage.setItem(RECOMMENDATIONS_STORAGE_KEY, JSON.stringify(recommendations));
 }
 
 function normalizeErrorMessage(payload: RequestErrorPayload | null): string {
@@ -1028,6 +1136,267 @@ export async function setRecipeActive(id: string | number, isActive: boolean): P
   const formData = new FormData();
   formData.append('isActive', String(isActive));
   return request(`/recipes/${id}`, { method: 'PATCH', body: formData });
+}
+
+// ─── Exercise Recommendations API ───────────────────────────────────────────
+
+const RECOMMENDATION_EXERCISES_PATH = '/recommendation/exercises';
+
+function toStringArray(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function mockExerciseSummaries(ids: string[]): RecommendationExerciseItem[] {
+  const exercises = getMockExercises();
+  return ids.map((id) => {
+    const exercise = exercises.find((item) => String(item.id) === String(id));
+    return {
+      id,
+      name: exercise?.name || id,
+      videoUrl: exercise?.videoUrl || '',
+      imageUrls: exercise?.imageUrls || [],
+    };
+  });
+}
+
+export function normalizeRecommendation(recommendation: any): Recommendation {
+  if (!recommendation) return recommendation;
+  const muscleGroupIds = toStringArray(recommendation.muscleGroupIds);
+  const exerciseIds = toStringArray(recommendation.exerciseIds);
+  const deletedAt = recommendation.deletedAt ?? recommendation.deleted_at ?? null;
+  const isDeleted = Boolean(recommendation.isDeleted ?? recommendation.deleted ?? deletedAt);
+  return {
+    ...recommendation,
+    id: recommendation.id ?? recommendation._id,
+    name: recommendation.name ?? recommendation.title ?? '',
+    isRestDay: Boolean(recommendation.isRestDay),
+    imageUrl: recommendation.imageUrl ?? recommendation.image_url ?? null,
+    videoUrl: recommendation.videoUrl ?? recommendation.video_url ?? null,
+    muscleGroupIds,
+    muscleGroups: toStringArray(recommendation.muscleGroups),
+    exerciseIds,
+    exercises: Array.isArray(recommendation.exercises)
+      ? recommendation.exercises.map((exercise: any) => ({
+          id: exercise.id ?? exercise._id,
+          name: exercise.name ?? exercise.title ?? '',
+          videoUrl: exercise.videoUrl ?? exercise.video_url ?? '',
+          imageUrls: exercise.imageUrls || (exercise.imageUrl ? [exercise.imageUrl] : []),
+        }))
+      : [],
+    isActive: recommendation.isActive ?? recommendation.active ?? true,
+    isDeleted,
+    deletedAt,
+  };
+}
+
+function filterRecommendationsByDeletedState(
+  recommendations: Recommendation[],
+  params: ListRecommendationsParams,
+): Recommendation[] {
+  if (params.isDeleted !== undefined) {
+    return recommendations.filter((recommendation) => Boolean(recommendation.isDeleted) === params.isDeleted);
+  }
+  if (params.isActive === false) {
+    return recommendations.filter((recommendation) => !recommendation.isDeleted);
+  }
+  return recommendations;
+}
+
+export async function getRecommendation(id: string | number): Promise<Recommendation> {
+  if (USE_MOCK_API) {
+    const found = getMockRecommendations().find((item) => String(item.id) === String(id));
+    if (!found) throw new Error('Recommendation exercise not found');
+    return normalizeRecommendation(found);
+  }
+  const raw = await request<Recommendation>(`${RECOMMENDATION_EXERCISES_PATH}/${id}`);
+  return normalizeRecommendation(raw);
+}
+
+export async function listRecommendations(params: ListRecommendationsParams = {}): Promise<RecommendationListResponse> {
+  if (USE_MOCK_API) {
+    const page = params.page || 1;
+    const limit = params.limit || 12;
+    const search = params.search?.toLowerCase().trim();
+    const filterMuscleIds = params.muscleGroupIds || [];
+    const all = getMockRecommendations().filter((recommendation) => {
+      const normalized = normalizeRecommendation(recommendation);
+      if (search) {
+        const haystack = [
+          normalized.name,
+          ...(normalized.muscleGroups || []),
+          ...(normalized.exercises || []).map((exercise) => exercise.name),
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      if (params.isRestDay !== undefined && Boolean(normalized.isRestDay) !== params.isRestDay) return false;
+      if (params.isDeleted !== undefined && Boolean(normalized.isDeleted) !== params.isDeleted) return false;
+      if (params.isDeleted === undefined && params.isActive === false && normalized.isDeleted) return false;
+      if (params.isActive !== undefined && (normalized.isActive !== false) !== params.isActive) return false;
+      if (params.hasVideo !== undefined && Boolean(normalized.videoUrl) !== params.hasVideo) return false;
+      if (filterMuscleIds.length && !filterMuscleIds.some((id) => normalized.muscleGroupIds?.includes(id))) return false;
+      return true;
+    });
+    const start = (page - 1) * limit;
+    return {
+      recommendations: all.slice(start, start + limit).map(normalizeRecommendation),
+      total: all.length,
+      page,
+      limit,
+    };
+  }
+
+  const data = await request<RecommendationListResponse | Recommendation[] | { data?: RecommendationListResponse | Recommendation[]; items?: Recommendation[] }>(withQuery(RECOMMENDATION_EXERCISES_PATH, {
+    page: params.page || 1,
+    limit: params.limit || 12,
+    includeInactive: true,
+    search: params.search,
+    isRestDay: params.isRestDay,
+    isActive: params.isActive,
+    isDeleted: params.isDeleted,
+    hasVideo: params.hasVideo,
+    muscleGroupIds: params.muscleGroupIds?.join(','),
+  }));
+
+  if (Array.isArray(data)) {
+    const recommendations = filterRecommendationsByDeletedState(data.map(normalizeRecommendation), params);
+    return {
+      recommendations,
+      total: recommendations.length,
+      page: params.page || 1,
+      limit: params.limit || data.length || 10,
+    };
+  }
+
+  const nested = (data as { data?: RecommendationListResponse | Recommendation[] }).data;
+  if (Array.isArray(nested)) {
+    const recommendations = filterRecommendationsByDeletedState(nested.map(normalizeRecommendation), params);
+    return {
+      recommendations,
+      total: recommendations.length,
+      page: params.page || 1,
+      limit: params.limit || nested.length || 10,
+    };
+  }
+
+  const response = (nested && !Array.isArray(nested) ? nested : data) as Partial<RecommendationListResponse> & {
+    items?: Recommendation[];
+    results?: Recommendation[];
+    rows?: Recommendation[];
+  };
+  const recommendations = asArray<Recommendation>(response.recommendations || response.items || response.results || response.rows);
+  const normalizedRecommendations = filterRecommendationsByDeletedState(recommendations.map(normalizeRecommendation), params);
+  const total = normalizedRecommendations.length === recommendations.length
+    ? Number(response.total ?? recommendations.length)
+    : normalizedRecommendations.length;
+  return {
+    recommendations: normalizedRecommendations,
+    total,
+    page: Number(response.page ?? params.page ?? 1),
+    limit: Number(response.limit ?? params.limit ?? 12),
+  };
+}
+
+export async function saveRecommendation(payload: SaveRecommendationPayload): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    const recommendations = getMockRecommendations();
+    const isRestDay = Boolean(payload.isRestDay);
+    const muscleGroupIds = isRestDay ? [] : toStringArray(payload.muscleGroupIds);
+    const exerciseIds = isRestDay ? [] : toStringArray(payload.exerciseIds);
+    const muscleGroups = muscleGroupIds.map((id) => mockLookups.find((lookup) => lookup.id === id)?.value || id);
+    const imageUrl = payload.image ? URL.createObjectURL(payload.image) : payload.imageUrl || null;
+    const videoUrl = payload.video ? URL.createObjectURL(payload.video) : payload.videoUrl || null;
+    const normalized = {
+      name: payload.name,
+      isRestDay,
+      imageUrl: payload.deleteImageUrl ? null : imageUrl,
+      videoUrl: payload.deleteVideoUrl ? null : videoUrl,
+      muscleGroupIds,
+      muscleGroups,
+      exerciseIds,
+      exercises: mockExerciseSummaries(exerciseIds),
+      isActive: payload.isActive !== false,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (payload.id) {
+      const existing = recommendations.find((item) => String(item.id) === String(payload.id));
+      if (!existing) throw new Error('Recommendation exercise not found');
+      Object.assign(existing, normalized);
+    } else {
+      const newId = recommendations.length ? Math.max(...recommendations.map((item) => Number(item.id))) + 1 : 1;
+      recommendations.push({
+        id: newId,
+        ...normalized,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    saveMockRecommendations(recommendations);
+    return { ok: true };
+  }
+
+  const hasMediaChange = Boolean(payload.image || payload.deleteImageUrl || payload.video || payload.deleteVideoUrl);
+  const isUpdate = Boolean(payload.id);
+  const method = isUpdate ? 'PATCH' : 'POST';
+  const path = payload.id ? `${RECOMMENDATION_EXERCISES_PATH}/${payload.id}` : RECOMMENDATION_EXERCISES_PATH;
+
+  if (hasMediaChange) {
+    const formData = new FormData();
+    formData.append('name', payload.name);
+    if (payload.isRestDay !== undefined) formData.append('isRestDay', String(payload.isRestDay));
+    if (!payload.isRestDay) {
+      if (payload.muscleGroupIds?.length) formData.append('muscleGroupIds', payload.muscleGroupIds.join(','));
+      if (payload.exerciseIds?.length) formData.append('exerciseIds', payload.exerciseIds.join(','));
+    }
+    if (payload.image) formData.append('image', payload.image);
+    if (payload.deleteImageUrl) formData.append('deleteImageUrl', 'true');
+    if (payload.video) formData.append('video', payload.video);
+    if (payload.deleteVideoUrl) formData.append('deleteVideoUrl', 'true');
+    if (payload.isActive !== undefined) formData.append('isActive', String(payload.isActive));
+    return request(path, { method, body: formData });
+  }
+
+  return request(path, {
+    method,
+    body: JSON.stringify({
+      name: payload.name,
+      isRestDay: payload.isRestDay,
+      muscleGroupIds: payload.isRestDay ? [] : payload.muscleGroupIds,
+      exerciseIds: payload.isRestDay ? [] : payload.exerciseIds,
+      imageUrl: payload.imageUrl,
+      deleteImageUrl: payload.deleteImageUrl,
+      videoUrl: payload.videoUrl,
+      deleteVideoUrl: payload.deleteVideoUrl,
+      isActive: payload.isActive,
+    }),
+  });
+}
+
+export async function deleteRecommendation(id: string | number): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    saveMockRecommendations(getMockRecommendations().filter((item) => String(item.id) !== String(id)));
+    return { ok: true };
+  }
+  return request(`${RECOMMENDATION_EXERCISES_PATH}/${id}`, { method: 'DELETE' });
+}
+
+export async function setRecommendationActive(id: string | number, isActive: boolean): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    const recommendations = getMockRecommendations();
+    const existing = recommendations.find((item) => String(item.id) === String(id));
+    if (existing) {
+      existing.isActive = isActive;
+      existing.updatedAt = new Date().toISOString();
+      saveMockRecommendations(recommendations);
+    }
+    return { ok: true };
+  }
+  return request(`${RECOMMENDATION_EXERCISES_PATH}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive }),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

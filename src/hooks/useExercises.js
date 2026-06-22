@@ -16,6 +16,30 @@ function toArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function lookupId(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return String(value.id ?? value._id ?? value.key ?? '');
+}
+
+function exerciseMuscleGroupIds(exercise) {
+  return [
+    lookupId(exercise.muscleGroup),
+    lookupId(exercise.muscleGroupLookup),
+    lookupId(exercise.primaryMuscleGroup),
+    lookupId(exercise.targetMuscle),
+    lookupId(exercise.secondaryMuscleGroup),
+    exercise.muscleGroupId,
+    exercise.primaryMuscleGroupId,
+    exercise.targetMuscleId,
+    exercise.secondaryMuscleGroupId,
+    ...toArray(exercise.muscleGroupIds),
+    ...toArray(exercise.targetMuscleIds),
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
 /** Paginated/filtered exercise list. Re-runs whenever params change. */
 export function useExercisesQuery(params) {
   return useQuery({
@@ -87,6 +111,7 @@ export function useExerciseOptions(enabled = true) {
       return toArray(data?.exercises).map((exercise) => ({
         id: exercise.id ?? exercise._id,
         name: exercise.name ?? '',
+        muscleGroupIds: exerciseMuscleGroupIds(exercise),
       }));
     },
     enabled,

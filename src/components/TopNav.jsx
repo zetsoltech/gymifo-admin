@@ -48,6 +48,13 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
             >
               Recipe Videos
             </Button>
+            <Button
+              type="button"
+              variant={activePage === 'recommendations' ? 'default' : 'ghost'}
+              onClick={() => onNavigate('recommendations')}
+            >
+              Recommendations
+            </Button>
             <Button type="button" variant="ghost" disabled>
               Workouts
             </Button>
