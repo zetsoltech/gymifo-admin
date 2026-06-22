@@ -39,14 +39,14 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
               variant={activePage === 'exercises' ? 'default' : 'ghost'}
               onClick={() => onNavigate('exercises')}
             >
-              Exercise Videos
+              Exercises
             </Button>
             <Button
               type="button"
               variant={activePage === 'recipes' ? 'default' : 'ghost'}
               onClick={() => onNavigate('recipes')}
             >
-              Recipe Videos
+              Recipes
             </Button>
             <Button
               type="button"
@@ -54,9 +54,6 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
               onClick={() => onNavigate('recommendations')}
             >
               Recommendations
-            </Button>
-            <Button type="button" variant="ghost" disabled>
-              Workouts
             </Button>
             <Button type="button" variant="ghost" disabled>
               Users
