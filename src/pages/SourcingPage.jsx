@@ -585,14 +585,35 @@ export function SourcingPage({ showToast }) {
           {current && (
             <Card>
               <CardContent className="space-y-4 py-5">
-                <div className="flex items-center justify-center gap-3">
-                  <span className="text-xl font-semibold">{current.name}</span>
-                  <StatusBadge status={statusOf(current.id)} />
-                  {current.hasVideo && (
-                    <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">
-                      Has final video
-                    </span>
-                  )}
+                <div className="space-y-2 text-center">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <span className="text-xl font-semibold">{current.name}</span>
+                    <StatusBadge status={statusOf(current.id)} />
+                    {current.hasVideo && (
+                      <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">
+                        Has final video
+                      </span>
+                    )}
+                  </div>
+                  {/* Exercise metadata */}
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {current.muscleGroup && (
+                      <span><span className="font-medium text-foreground/60">Muscle</span> {current.muscleGroup}</span>
+                    )}
+                    {current.equipment && (
+                      <span><span className="font-medium text-foreground/60">Equipment</span> {current.equipment}</span>
+                    )}
+                    {current.bodyPart && (
+                      <span><span className="font-medium text-foreground/60">Body part</span> {current.bodyPart}</span>
+                    )}
+                    {current.exerciseType && (
+                      <span><span className="font-medium text-foreground/60">Type</span> {current.exerciseType}</span>
+                    )}
+                    {current.difficulty && (
+                      <span><span className="font-medium text-foreground/60">Difficulty</span> {current.difficulty}</span>
+                    )}
+                    <span><span className="font-medium text-foreground/60">Warmup</span> {current.isWarmup ? 'Yes' : 'No'}</span>
+                  </div>
                 </div>
 
                 {mode === 'animation' ? (

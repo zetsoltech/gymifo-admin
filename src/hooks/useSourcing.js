@@ -9,6 +9,12 @@ function lookupKey(value) {
   return value.key || String(value.id || '');
 }
 
+function lookupLabel(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return value.value || value.key || String(value.id || '');
+}
+
 function toArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -35,6 +41,11 @@ export function useSourcingExercises() {
           exerciseTypeKey: lookupKey(exercise.exerciseType ?? exercise.type),
           difficultyKey: lookupKey(exercise.difficultyLevel ?? exercise.difficulty),
           bodyPartKey: lookupKey(exercise.bodyPart),
+          muscleGroup: lookupLabel(exercise.muscleGroup ?? exercise.muscle ?? exercise.targetMuscle),
+          equipment: lookupLabel(exercise.equipment ?? exercise.equipmentName),
+          exerciseType: lookupLabel(exercise.exerciseType ?? exercise.type),
+          difficulty: lookupLabel(exercise.difficultyLevel ?? exercise.difficulty),
+          bodyPart: lookupLabel(exercise.bodyPart),
           isWarmup: Boolean(exercise.isWarmup),
           isActive: exercise.isActive !== false,
         };
