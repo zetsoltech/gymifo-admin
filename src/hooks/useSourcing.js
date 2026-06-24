@@ -3,6 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { listExercises } from '../api.ts';
 import { fetchExerciseDbDataset } from '../lib/sourcing.js';
 
+function lookupKey(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return value.key || String(value.id || '');
+}
+
 function toArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -24,6 +30,13 @@ export function useSourcingExercises() {
           id: String(exercise.id ?? exercise._id ?? ''),
           name: exercise.name ?? exercise.exerciseName ?? exercise.title ?? '',
           hasVideo: Boolean(videoUrl),
+          muscleGroupKey: lookupKey(exercise.muscleGroup ?? exercise.muscle ?? exercise.targetMuscle),
+          equipmentKey: lookupKey(exercise.equipment ?? exercise.equipmentName),
+          exerciseTypeKey: lookupKey(exercise.exerciseType ?? exercise.type),
+          difficultyKey: lookupKey(exercise.difficultyLevel ?? exercise.difficulty),
+          bodyPartKey: lookupKey(exercise.bodyPart),
+          isWarmup: Boolean(exercise.isWarmup),
+          isActive: exercise.isActive !== false,
         };
       });
     },

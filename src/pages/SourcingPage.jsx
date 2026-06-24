@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight, Download, Film, Trash2, Video } from 'lucide-react';
 import { useSourcingExercises, useExerciseDbDataset, usePickStore } from '../hooks/useSourcing.js';
+import { useLookupsQuery } from '../hooks/useExercises.js';
 import {
   ANIM_STORE_KEY,
   YT_STORE_KEY,
@@ -49,6 +50,16 @@ export function SourcingPage({ showToast }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | pending | picked | none
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [dbFilters, setDbFilters] = useState({
+    muscleGroup: '',
+    equipment: '',
+    type: '',
+    difficulty: '',
+    bodyPart: '',
+    warmup: '',
+    status: '',
+    video: '',
+  });
   const [index, setIndex] = useState(0);
   const [reps, setReps] = useState(3);
   const [fetchingId, setFetchingId] = useState(null);
@@ -58,6 +69,9 @@ export function SourcingPage({ showToast }) {
   const { data: dataset, isLoading: datasetLoading, isError: datasetError } = useExerciseDbDataset(
     mode === 'animation',
   );
+  const lookupsQuery = useLookupsQuery();
+  const lookups = lookupsQuery.data ?? { muscleGroups: [], equipment: [], exerciseTypes: [], difficultyLevels: [], bodyParts: [] };
+  const toArr = (v) => Array.isArray(v) ? v : [];
   const animStore = usePickStore(ANIM_STORE_KEY);
   const ytStore = usePickStore(YT_STORE_KEY);
 
@@ -77,16 +91,32 @@ export function SourcingPage({ showToast }) {
     [mode, animStore.store, ytStore.store],
   );
 
+  const allValue = '__all__';
+  function updateDbFilter(key, value) {
+    setDbFilters((prev) => ({ ...prev, [key]: value === allValue ? '' : value }));
+    setIndex(0);
+  }
+
   // Filtered, ordered list the navigator walks through.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const f = dbFilters;
     return exercises.filter((ex) => {
       if (q && !ex.name.toLowerCase().includes(q)) return false;
       if (hideCompleted && ex.hasVideo) return false;
       if (filter !== 'all' && statusOf(ex.id) !== filter) return false;
+      if (f.muscleGroup && ex.muscleGroupKey !== f.muscleGroup) return false;
+      if (f.equipment && ex.equipmentKey !== f.equipment) return false;
+      if (f.type && ex.exerciseTypeKey !== f.type) return false;
+      if (f.difficulty && ex.difficultyKey !== f.difficulty) return false;
+      if (f.bodyPart && ex.bodyPartKey !== f.bodyPart) return false;
+      if (f.warmup !== '' && ex.isWarmup !== (f.warmup === 'true')) return false;
+      if (f.status !== '' && ex.isActive !== (f.status === 'active')) return false;
+      if (f.video === 'with' && !ex.hasVideo) return false;
+      if (f.video === 'without' && ex.hasVideo) return false;
       return true;
     });
-  }, [exercises, search, filter, hideCompleted, statusOf]);
+  }, [exercises, search, filter, hideCompleted, statusOf, dbFilters]);
 
   // Keep the cursor in range as filters change.
   useEffect(() => {
@@ -349,84 +379,133 @@ export function SourcingPage({ showToast }) {
 
       {/* Controls */}
       <Card>
-        <CardContent className="flex flex-wrap items-center gap-3 py-4">
-          <Input
-            placeholder="Jump to exercise…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setIndex(0);
-            }}
-            className="w-56"
-          />
-          <Select
-            value={filter}
-            onValueChange={(v) => {
-              setFilter(v);
-              setIndex(0);
-            }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="picked">Picked</SelectItem>
-              <SelectItem value="none">Marked none</SelectItem>
-            </SelectContent>
-          </Select>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={hideCompleted}
-              onChange={(e) => {
-                setHideCompleted(e.target.checked);
-                setIndex(0);
-              }}
-            />
-            Hide exercises that already have a video
-          </label>
-
-          {mode === 'youtube' && (
+        <CardContent className="space-y-3 py-4">
+          {/* Row 1: search, sourcing status, video toggle, mode-specific, actions */}
+          <div className="flex flex-wrap items-center gap-3">
             <Input
-              type="password"
-              placeholder="YouTube Data API key…"
-              value={ytKey}
-              onChange={(e) => {
-                const v = e.target.value.trim();
-                setYtKey(v);
-                localStorage.setItem(YT_API_KEY_STORE, v);
-              }}
-              className="w-56"
+              placeholder="Search exercises…"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setIndex(0); }}
+              className="w-52"
             />
-          )}
-          {mode === 'animation' && (
+            <Select value={filter} onValueChange={(v) => { setFilter(v); setIndex(0); }}>
+              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All picks</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="picked">Picked</SelectItem>
+                <SelectItem value="none">Marked none</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Video filter — prominent button toggle */}
+            <div className="inline-flex rounded-lg border border-border text-sm">
+              {[['', 'All videos'], ['with', 'Has video'], ['without', 'No video']].map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => updateDbFilter('video', v || allValue)}
+                  className={`px-3 py-1.5 first:rounded-l-lg last:rounded-r-lg transition-colors ${
+                    dbFilters.video === v ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              Reps per clip
-              <Input
-                type="number"
-                min={1}
-                max={10}
-                value={reps}
-                onChange={(e) => setReps(e.target.value)}
-                className="w-16"
-              />
+              <input type="checkbox" checked={hideCompleted} onChange={(e) => { setHideCompleted(e.target.checked); setIndex(0); }} />
+              Hide with final video
             </label>
-          )}
+            {mode === 'youtube' && (
+              <Input
+                type="password"
+                placeholder="YouTube Data API key…"
+                value={ytKey}
+                onChange={(e) => { const v = e.target.value.trim(); setYtKey(v); localStorage.setItem(YT_API_KEY_STORE, v); }}
+                className="w-52"
+              />
+            )}
+            {mode === 'animation' && (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Reps per clip
+                <Input type="number" min={1} max={10} value={reps} onChange={(e) => setReps(e.target.value)} className="w-16" />
+              </label>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                <b className="text-foreground">{counts.picked}</b> picked ·{' '}
+                <b className="text-foreground">{counts.pending}</b> pending ·{' '}
+                <b className="text-foreground">{counts.none}</b> none
+              </span>
+              <Button type="button" variant="outline" onClick={handleExport}>
+                <Download className="size-4" /> Export
+              </Button>
+              <Button type="button" variant="outline" onClick={handleClear}>
+                <Trash2 className="size-4" /> Clear
+              </Button>
+            </div>
+          </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              <b className="text-foreground">{counts.picked}</b> picked ·{' '}
-              <b className="text-foreground">{counts.pending}</b> pending ·{' '}
-              <b className="text-foreground">{counts.none}</b> none
-            </span>
-            <Button type="button" variant="outline" onClick={handleExport}>
-              <Download className="size-4" /> Export
-            </Button>
-            <Button type="button" variant="outline" onClick={handleClear}>
-              <Trash2 className="size-4" /> Clear
-            </Button>
+          {/* Row 2: exercise property filters (same as Exercises tab) */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
+            <Select value={dbFilters.muscleGroup || allValue} onValueChange={(v) => updateDbFilter('muscleGroup', v)}>
+              <SelectTrigger><SelectValue placeholder="Muscle group" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All muscles</SelectItem>
+                {toArr(lookups.muscleGroups).map((item) => <SelectItem key={item.id} value={item.key}>{item.value}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dbFilters.equipment || allValue} onValueChange={(v) => updateDbFilter('equipment', v)}>
+              <SelectTrigger><SelectValue placeholder="Equipment" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All equipment</SelectItem>
+                {toArr(lookups.equipment).map((item) => <SelectItem key={item.id} value={item.key}>{item.value}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dbFilters.type || allValue} onValueChange={(v) => updateDbFilter('type', v)}>
+              <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All types</SelectItem>
+                {(toArr(lookups.exerciseTypes).length ? toArr(lookups.exerciseTypes) : [
+                  { key: 'compound', value: 'Compound' },
+                  { key: 'isolation', value: 'Isolation' },
+                ]).map((item) => <SelectItem key={item.key} value={item.key}>{item.value}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dbFilters.difficulty || allValue} onValueChange={(v) => updateDbFilter('difficulty', v)}>
+              <SelectTrigger><SelectValue placeholder="Difficulty" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All difficulty</SelectItem>
+                {(toArr(lookups.difficultyLevels).length ? toArr(lookups.difficultyLevels) : [
+                  { key: 'beginner', value: 'Beginner' },
+                  { key: 'intermediate', value: 'Intermediate' },
+                  { key: 'advanced', value: 'Advanced' },
+                ]).map((item) => <SelectItem key={item.key} value={item.key}>{item.value}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dbFilters.bodyPart || allValue} onValueChange={(v) => updateDbFilter('bodyPart', v)}>
+              <SelectTrigger><SelectValue placeholder="Body part" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All body parts</SelectItem>
+                {toArr(lookups.bodyParts).map((item) => <SelectItem key={item.id} value={item.key}>{item.value}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dbFilters.warmup || allValue} onValueChange={(v) => updateDbFilter('warmup', v)}>
+              <SelectTrigger><SelectValue placeholder="Warmup" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>Warmup &amp; regular</SelectItem>
+                <SelectItem value="true">Warmup only</SelectItem>
+                <SelectItem value="false">Regular only</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={dbFilters.status || allValue} onValueChange={(v) => updateDbFilter('status', v)}>
+              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All statuses</SelectItem>
+                <SelectItem value="active">Active only</SelectItem>
+                <SelectItem value="inactive">Inactive only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

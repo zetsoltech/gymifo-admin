@@ -199,6 +199,31 @@ export function ExercisesPage({ showToast }) {
         </div>
       </div>
 
+      {/* Video filter — prominent toggle above the filter grid */}
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-sm font-medium text-muted-foreground">Video:</span>
+        <div className="inline-flex rounded-lg border border-border text-sm">
+          {[
+            [allValue, 'All'],
+            ['with', 'Has video'],
+            ['without', 'No video'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => updateFilter('video', value)}
+              className={`px-3 py-1.5 first:rounded-l-lg last:rounded-r-lg transition-colors ${
+                (filters.video || allValue) === value
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Select value={filters.muscleGroup || allValue} onValueChange={(value) => updateFilter('muscleGroup', value)}>
           <SelectTrigger className="w-full"><SelectValue placeholder="Muscle group" /></SelectTrigger>
@@ -256,14 +281,6 @@ export function ExercisesPage({ showToast }) {
             <SelectItem value={allValue}>All statuses</SelectItem>
             <SelectItem value="active">Active only</SelectItem>
             <SelectItem value="inactive">Inactive only</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filters.video || allValue} onValueChange={(value) => updateFilter('video', value)}>
-          <SelectTrigger className="w-full"><SelectValue placeholder="Video" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={allValue}>With &amp; without video</SelectItem>
-            <SelectItem value="with">With video</SelectItem>
-            <SelectItem value="without">Without video</SelectItem>
           </SelectContent>
         </Select>
       </div>
