@@ -55,6 +55,13 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
             >
               Recommendations
             </Button>
+            <Button
+              type="button"
+              variant={activePage === 'sourcing' ? 'default' : 'ghost'}
+              onClick={() => onNavigate('sourcing')}
+            >
+              Sourcing
+            </Button>
             <Button type="button" variant="ghost" disabled>
               Users
             </Button>

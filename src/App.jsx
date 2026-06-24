@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage.jsx';
 import { ExercisesPage } from './pages/ExercisesPage.jsx';
 import { RecipesPage } from './pages/RecipesPage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
+import { SourcingPage } from './pages/SourcingPage.jsx';
 import { TopNav } from './components/TopNav.jsx';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -49,6 +50,7 @@ export default function App() {
         {activePage === 'exercises' && <ExercisesPage showToast={showToast} />}
         {activePage === 'recipes' && <RecipesPage showToast={showToast} />}
         {activePage === 'recommendations' && <RecommendationsPage showToast={showToast} />}
+        {activePage === 'sourcing' && <SourcingPage showToast={showToast} />}
       </main>
       <Toaster richColors position="top-right" />
     </div>
