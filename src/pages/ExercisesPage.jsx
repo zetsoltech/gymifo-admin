@@ -103,6 +103,25 @@ export function ExercisesPage({ showToast }) {
     hasVideo: filters.video === '' ? undefined : filters.video === 'with',
   };
 
+  // Shared base params without the video filter — used for count queries so both
+  // numbers update together when the other filters change.
+  const countBase = {
+    search: debouncedSearch,
+    muscleGroup: filters.muscleGroup,
+    equipment: filters.equipment,
+    type: filters.type,
+    difficulty: filters.difficulty,
+    bodyPart: filters.bodyPart,
+    isWarmup: filters.warmup === '' ? undefined : filters.warmup === 'true',
+    isActive: filters.status === '' ? undefined : filters.status === 'active',
+    page: 1,
+    limit: 1,
+  };
+  const withVideoQuery = useExercisesQuery({ ...countBase, hasVideo: true });
+  const withoutVideoQuery = useExercisesQuery({ ...countBase, hasVideo: false });
+  const withVideoCount = withVideoQuery.data?.total ?? null;
+  const withoutVideoCount = withoutVideoQuery.data?.total ?? null;
+
   const exercisesQuery = useExercisesQuery(queryParams);
   const lookupsQuery = useLookupsQuery();
   const saveMutation = useSaveExercise();
@@ -204,10 +223,10 @@ export function ExercisesPage({ showToast }) {
         <span className="text-sm font-medium text-muted-foreground">Video:</span>
         <div className="inline-flex rounded-lg border border-border text-sm">
           {[
-            [allValue, 'All'],
-            ['with', 'Has video'],
-            ['without', 'No video'],
-          ].map(([value, label]) => (
+            [allValue, 'All', withVideoCount !== null && withoutVideoCount !== null ? withVideoCount + withoutVideoCount : null],
+            ['with', 'Has video', withVideoCount],
+            ['without', 'No video', withoutVideoCount],
+          ].map(([value, label, count]) => (
             <button
               key={value}
               type="button"
@@ -218,7 +237,7 @@ export function ExercisesPage({ showToast }) {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {label}
+              {label}{count !== null ? ` (${count})` : ''}
             </button>
           ))}
         </div>

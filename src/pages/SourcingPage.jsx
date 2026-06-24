@@ -97,6 +97,12 @@ export function SourcingPage({ showToast }) {
     setIndex(0);
   }
 
+  // Video counts over all loaded exercises (not affected by other filters).
+  const videoStats = useMemo(() => ({
+    with: exercises.filter((e) => e.hasVideo).length,
+    without: exercises.filter((e) => !e.hasVideo).length,
+  }), [exercises]);
+
   // Filtered, ordered list the navigator walks through.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -399,7 +405,11 @@ export function SourcingPage({ showToast }) {
             </Select>
             {/* Video filter — prominent button toggle */}
             <div className="inline-flex rounded-lg border border-border text-sm">
-              {[['', 'All videos'], ['with', 'Has video'], ['without', 'No video']].map(([v, label]) => (
+              {[
+                ['', `All videos${exercises.length ? ` (${exercises.length})` : ''}`],
+                ['with', `Has video${exercises.length ? ` (${videoStats.with})` : ''}`],
+                ['without', `No video${exercises.length ? ` (${videoStats.without})` : ''}`],
+              ].map(([v, label]) => (
                 <button
                   key={v}
                   type="button"
