@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Box, ChevronLeft, ChevronRight, Download, Film, Image, Trash2, Video } from 'lucide-react';
+import { Box, ChevronLeft, ChevronRight, Download, Film, Globe, Image, Trash2, Video } from 'lucide-react';
 import { useSourcingExercises, useExerciseDbDataset, usePickStore } from '../hooks/useSourcing.js';
 import { useLookupsQuery } from '../hooks/useExercises.js';
 import {
@@ -8,6 +8,7 @@ import {
   YT_STORE_KEY,
   MIXAMO_STORE_KEY,
   STOCK_STORE_KEY,
+  ANIMATIC_STORE_KEY,
   YT_API_KEY_STORE,
   PEXELS_KEY_STORE,
   candidatesFor,
@@ -24,6 +25,7 @@ import { AnimationPanel } from '../components/sourcing/AnimationPanel.jsx';
 import { YoutubePanel } from '../components/sourcing/YoutubePanel.jsx';
 import { MixamoPanel } from '../components/sourcing/MixamoPanel.jsx';
 import { StockPanel } from '../components/sourcing/StockPanel.jsx';
+import { AnimaticPanel } from '../components/sourcing/AnimaticPanel.jsx';
 import { ClipEditorModal } from '../components/sourcing/ClipEditorModal.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -42,6 +44,7 @@ const MODES = [
   { key: 'youtube', label: 'YouTube', icon: Video },
   { key: 'mixamo', label: 'Mixamo 3D', icon: Box },
   { key: 'stock', label: 'Stock', icon: Image },
+  { key: 'animatic', label: 'Animatic', icon: Globe },
 ];
 
 const STATUS_STYLES = {
@@ -86,6 +89,7 @@ export function SourcingPage({ showToast }) {
   const ytStore = usePickStore(YT_STORE_KEY);
   const mixamoStore = usePickStore(MIXAMO_STORE_KEY);
   const stockStore = usePickStore(STOCK_STORE_KEY);
+  const animaticStore = usePickStore(ANIMATIC_STORE_KEY);
 
   // Aggregate status checks all four sources.
   // Picked = at least one confirmed pick from any source.
@@ -96,24 +100,27 @@ export function SourcingPage({ showToast }) {
       const ytEntry = ytStore.store[id];
       const mixamoPick = mixamoStore.store[id];
       const stockEntry = stockStore.store[id];
+      const animaticPick = animaticStore.store[id];
 
       const hasPick =
         (animPick && animPick !== 'none') ||
         (ytEntry?.pick && ytEntry.pick !== 'none') ||
         (mixamoPick && mixamoPick !== 'none') ||
-        (stockEntry?.pick && stockEntry.pick !== 'none');
+        (stockEntry?.pick && stockEntry.pick !== 'none') ||
+        (animaticPick && animaticPick !== 'none');
       if (hasPick) return 'picked';
 
       const hasNone =
         animPick === 'none' ||
         ytEntry?.pick === 'none' ||
         mixamoPick === 'none' ||
-        stockEntry?.pick === 'none';
+        stockEntry?.pick === 'none' ||
+        animaticPick === 'none';
       if (hasNone) return 'none';
 
       return 'pending';
     },
-    [animStore.store, ytStore.store, mixamoStore.store, stockStore.store],
+    [animStore.store, ytStore.store, mixamoStore.store, stockStore.store, animaticStore.store],
   );
 
   const allValue = '__all__';
@@ -313,6 +320,18 @@ export function SourcingPage({ showToast }) {
     });
   }, [current, stockStore]);
 
+  const pickAnimatic = useCallback(
+    (candidate) => {
+      if (!current) return;
+      animaticStore.update(current.id, candidate ?? undefined);
+    },
+    [current, animaticStore],
+  );
+  const toggleAnimaticNone = useCallback(() => {
+    if (!current) return;
+    animaticStore.update(current.id, (prev) => (prev === 'none' ? undefined : 'none'));
+  }, [current, animaticStore]);
+
   const saveClip = useCallback(
     (clip) => {
       if (!clipId) return;
@@ -345,6 +364,7 @@ export function SourcingPage({ showToast }) {
       ytStore: ytStore.store,
       mixamoStore: mixamoStore.store,
       stockStore: stockStore.store,
+      animaticStore: animaticStore.store,
       reps,
     });
 
@@ -353,7 +373,7 @@ export function SourcingPage({ showToast }) {
       return;
     }
 
-    const { sh, json, manifest, mixamoItems, gifItems, ytItems, stockItems } = result;
+    const { sh, json, manifest, mixamoItems, gifItems, ytItems, stockItems, animaticItems } = result;
     downloadTextFile('picks_manifest.json', json);
     downloadTextFile('download_all.sh', sh);
     if (mixamoItems.length) downloadTextFile('render.py', buildBlenderScript(mixamoItems));
@@ -363,6 +383,7 @@ export function SourcingPage({ showToast }) {
       ytItems.length && `${ytItems.length} YouTube`,
       mixamoItems.length && `${mixamoItems.length} Mixamo`,
       stockItems.length && `${stockItems.length} Pexels`,
+      animaticItems.length && `${animaticItems.length} Animatic`,
     ].filter(Boolean).join(', ');
 
     showToast?.(`Exported ${manifest.length} picks (${breakdown}) → run: bash download_all.sh`, 'success');
@@ -370,7 +391,7 @@ export function SourcingPage({ showToast }) {
 
   function handleClear() {
     const modeLabel = MODES.find((m) => m.key === mode)?.label || mode;
-    const store = { animation: animStore, youtube: ytStore, mixamo: mixamoStore, stock: stockStore }[mode];
+    const store = { animation: animStore, youtube: ytStore, mixamo: mixamoStore, stock: stockStore, animatic: animaticStore }[mode];
     if (!confirm(`Clear all ${modeLabel} picks? This cannot be undone.`)) return;
     store?.clear();
     showToast?.(`${modeLabel} picks cleared.`, 'info');
@@ -394,6 +415,7 @@ export function SourcingPage({ showToast }) {
       youtube: toggleYoutubeNone,
       mixamo: toggleMixamoNone,
       stock: toggleStockNone,
+      animatic: toggleAnimaticNone,
     },
     openClip: () => {
       if (mode === 'youtube' && current) {
@@ -669,6 +691,13 @@ export function SourcingPage({ showToast }) {
           Shortcuts: ←/→ nav · 1–6 select · N none · F fetch/refresh.
         </p>
       )}
+      {mode === 'animatic' && (
+        <p className="text-xs text-muted-foreground">
+          ExerciseAnimatic.com — 2,595 exercise animations. Click <b>Preview</b> to view the product page in-panel
+          (the video plays via the site&apos;s own player). Export lists the page URLs for manual reference.
+          Shortcuts: ←/→ navigate · N none.
+        </p>
+      )}
 
       {/* Navigator + panel */}
       {isLoading ? (
@@ -781,6 +810,14 @@ export function SourcingPage({ showToast }) {
                     onSearchOthers={() => searchOthersStock(current)}
                     onPick={pickStock}
                     onToggleNone={toggleStockNone}
+                  />
+                )}
+                {mode === 'animatic' && (
+                  <AnimaticPanel
+                    exercise={current}
+                    pick={animaticStore.store[current.id]}
+                    onPick={pickAnimatic}
+                    onToggleNone={toggleAnimaticNone}
                   />
                 )}
               </CardContent>

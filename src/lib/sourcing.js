@@ -16,6 +16,8 @@ export const MIXAMO_STORE_KEY = 'gymifo_sourcing_mixamo';
 export const STOCK_STORE_KEY = 'gymifo_sourcing_stock';
 export const YT_API_KEY_STORE = 'gymifo_yt_key';
 export const PEXELS_KEY_STORE = 'gymifo_pexels_key';
+export const ANIMATIC_STORE_KEY = 'gymifo_sourcing_animatic';
+export const ANIMATIC_BASE_URL = 'https://www.exerciseanimatic.com/product-page/';
 
 export const YT_PER_EXERCISE = 6;
 
@@ -160,6 +162,46 @@ export function pexelsErrorMessage(err) {
   if (m === 'NO_PEXELS_KEY') return 'Paste your Pexels API key to search stock footage.';
   if (m === 'PEXELS_KEY_INVALID') return 'Invalid Pexels API key — check your credentials.';
   return 'Error: ' + (m || 'request failed');
+}
+
+// ── ExerciseAnimatic.com sourcing ─────────────────────────────────────────────
+// Wix site with 2,595 exercise animation products. Slugs bundled as
+// /animatic_slugs.json in public/. Product pages can be iframed (no X-Frame-Options).
+export async function fetchAnimaticSlugs() {
+  const res = await fetch('/animatic_slugs.json');
+  if (!res.ok) throw new Error(`Failed to load ExerciseAnimatic catalogue (HTTP ${res.status})`);
+  return res.json();
+}
+
+export function slugToName(slug) {
+  return String(slug)
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Top-N ExerciseAnimatic slug candidates for an exercise name, scored by token overlap. */
+export function candidatesFromAnimatic(exerciseName, slugs, max = 6) {
+  if (!Array.isArray(slugs) || !slugs.length) return [];
+  const qt = tokens(exerciseName);
+  if (!qt.length) return [];
+  const nq = norm(exerciseName);
+  const scored = slugs.map((slug) => {
+    const nt = tokens(slug.replace(/-/g, ' '));
+    const ns = norm(slug.replace(/-/g, ' '));
+    let score = 0;
+    if (ns === nq) score += 100;
+    const matched = qt.filter((t) => nt.includes(t)).length;
+    score += (matched / qt.length) * 60;
+    if (ns.startsWith(nq) || nq.startsWith(ns)) score += 15;
+    if (ns.includes(nq)) score += 10;
+    score -= Math.abs(nt.length - qt.length) * 1.5;
+    return { slug, score };
+  });
+  return scored
+    .filter((x) => x.score > 20)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map((x) => ({ slug: x.slug, name: slugToName(x.slug), url: ANIMATIC_BASE_URL + x.slug }));
 }
 
 // ── Mixamo animation map ──────────────────────────────────────────────────────
@@ -363,7 +405,7 @@ export function buildYoutubeExport(picks) {
  * Generates download_all.sh + picks_manifest.json.
  * If Mixamo items exist, also call buildBlenderScript() for render.py.
  */
-export function buildUnifiedExport({ exercises, animStore, ytStore, mixamoStore, stockStore, reps }) {
+export function buildUnifiedExport({ exercises, animStore, ytStore, mixamoStore, stockStore, animaticStore, reps }) {
   const r = Math.max(1, Math.min(10, parseInt(reps, 10) || 3));
   const manifest = [];
 
@@ -373,6 +415,7 @@ export function buildUnifiedExport({ exercises, animStore, ytStore, mixamoStore,
     const ytEntry = ytStore[id];
     const mixamoPick = mixamoStore[id];
     const stockEntry = stockStore[id];
+    const animaticPick = (animaticStore || {})[id];
 
     if (animPick && animPick !== 'none') {
       manifest.push({ exercise: ex.name, exerciseId: id, source: 'exercisedb', gif: animPick.gif, animName: animPick.name });
@@ -388,6 +431,9 @@ export function buildUnifiedExport({ exercises, animStore, ytStore, mixamoStore,
       const sp = stockEntry.pick;
       manifest.push({ exercise: ex.name, exerciseId: id, source: 'pexels', downloadUrl: sp.downloadUrl, videoId: sp.id, duration: sp.duration });
     }
+    if (animaticPick && animaticPick !== 'none') {
+      manifest.push({ exercise: ex.name, exerciseId: id, source: 'exerciseanimatic', url: animaticPick.url, slug: animaticPick.slug });
+    }
   }
 
   if (!manifest.length) return null;
@@ -396,14 +442,21 @@ export function buildUnifiedExport({ exercises, animStore, ytStore, mixamoStore,
   const ytItems = manifest.filter((m) => m.source === 'youtube');
   const mixamoItems = manifest.filter((m) => m.source === 'mixamo');
   const stockItems = manifest.filter((m) => m.source === 'pexels');
-  const sources = [gifItems.length && 'ExerciseDB', ytItems.length && 'YouTube', mixamoItems.length && 'Mixamo', stockItems.length && 'Pexels'].filter(Boolean);
+  const animaticItems = manifest.filter((m) => m.source === 'exerciseanimatic');
+  const sources = [
+    gifItems.length && 'ExerciseDB',
+    ytItems.length && 'YouTube',
+    mixamoItems.length && 'Mixamo',
+    stockItems.length && 'Pexels',
+    animaticItems.length && 'ExerciseAnimatic',
+  ].filter(Boolean);
 
   let sh = `#!/bin/bash
 # Gymifo — unified exercise reference download
 # Sources: ${sources.join(', ')} · Total picks: ${manifest.length}
 # Requires: brew install ffmpeg yt-dlp curl
 set -e
-mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/stock\n\n`;
+mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/stock downloads/animatic\n\n`;
 
   if (gifItems.length) {
     const loops = r - 1;
@@ -451,10 +504,18 @@ mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/s
       sh += `#    "${p.animationName}"  →  downloads/mixamo/fbx/${safeName(p.exercise)}.fbx\n`;
     }
     sh += `# 2. Then render:\n`;
-    sh += `#    blender --background --python downloads/mixamo/render.py\n`;
+    sh += `#    blender --background --python downloads/mixamo/render.py\n\n`;
   }
 
-  return { sh, json: JSON.stringify(manifest, null, 2), manifest, gifItems, ytItems, mixamoItems, stockItems };
+  if (animaticItems.length) {
+    sh += `# ── ExerciseAnimatic.com — open in browser, save video manually ──────────\n`;
+    for (const p of animaticItems) {
+      sh += `# ${safeName(p.exercise)}: ${p.url}\n`;
+    }
+    sh += '\n';
+  }
+
+  return { sh, json: JSON.stringify(manifest, null, 2), manifest, gifItems, ytItems, mixamoItems, stockItems, animaticItems };
 }
 
 /** Blender Python script to render Mixamo FBX files to MP4s. */
