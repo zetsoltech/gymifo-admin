@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Download, Film, Trash2, Video } from 'lucide-react';
+import { Box, ChevronLeft, ChevronRight, Download, Film, Image, Trash2, Video } from 'lucide-react';
 import { useSourcingExercises, useExerciseDbDataset, usePickStore } from '../hooks/useSourcing.js';
 import { useLookupsQuery } from '../hooks/useExercises.js';
 import {
   ANIM_STORE_KEY,
   YT_STORE_KEY,
+  MIXAMO_STORE_KEY,
+  STOCK_STORE_KEY,
   YT_API_KEY_STORE,
+  PEXELS_KEY_STORE,
   candidatesFor,
   searchYouTube,
   ytErrorMessage,
-  buildAnimationExport,
-  buildYoutubeExport,
+  searchPexels,
+  pexelsErrorMessage,
+  suggestMixamoName,
+  buildUnifiedExport,
+  buildBlenderScript,
   downloadTextFile,
 } from '../lib/sourcing.js';
 import { AnimationPanel } from '../components/sourcing/AnimationPanel.jsx';
 import { YoutubePanel } from '../components/sourcing/YoutubePanel.jsx';
+import { MixamoPanel } from '../components/sourcing/MixamoPanel.jsx';
+import { StockPanel } from '../components/sourcing/StockPanel.jsx';
 import { ClipEditorModal } from '../components/sourcing/ClipEditorModal.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,6 +36,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const MODES = [
+  { key: 'animation', label: 'Animations', icon: Film },
+  { key: 'youtube', label: 'YouTube', icon: Video },
+  { key: 'mixamo', label: 'Mixamo 3D', icon: Box },
+  { key: 'stock', label: 'Stock', icon: Image },
+];
 
 const STATUS_STYLES = {
   picked: 'bg-primary/15 text-primary',
@@ -45,50 +60,60 @@ function StatusBadge({ status }) {
 }
 
 export function SourcingPage({ showToast }) {
-  const [mode, setMode] = useState('animation'); // 'animation' | 'youtube'
+  const [mode, setMode] = useState('animation');
   const [ytKey, setYtKey] = useState(() => localStorage.getItem(YT_API_KEY_STORE) || '');
+  const [ytMode, setYtMode] = useState('demo'); // 'demo' | 'tutorial'
+  const [pexelsKey, setPexelsKey] = useState(() => localStorage.getItem(PEXELS_KEY_STORE) || '');
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // all | pending | picked | none
+  const [filter, setFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [dbFilters, setDbFilters] = useState({
-    muscleGroup: '',
-    equipment: '',
-    type: '',
-    difficulty: '',
-    bodyPart: '',
-    warmup: '',
-    status: '',
-    video: '',
+    muscleGroup: '', equipment: '', type: '', difficulty: '', bodyPart: '', warmup: '', status: '', video: '',
   });
   const [index, setIndex] = useState(0);
   const [reps, setReps] = useState(3);
   const [fetchingId, setFetchingId] = useState(null);
+  const [stockFetchingId, setStockFetchingId] = useState(null);
   const [clipId, setClipId] = useState(null);
 
   const { data: exercises = [], isLoading, isError } = useSourcingExercises();
-  const { data: dataset, isLoading: datasetLoading, isError: datasetError } = useExerciseDbDataset(
-    mode === 'animation',
-  );
+  const { data: dataset, isLoading: datasetLoading, isError: datasetError } = useExerciseDbDataset(mode === 'animation');
   const lookupsQuery = useLookupsQuery();
   const lookups = lookupsQuery.data ?? { muscleGroups: [], equipment: [], exerciseTypes: [], difficultyLevels: [], bodyParts: [] };
-  const toArr = (v) => Array.isArray(v) ? v : [];
+  const toArr = (v) => (Array.isArray(v) ? v : []);
+
   const animStore = usePickStore(ANIM_STORE_KEY);
   const ytStore = usePickStore(YT_STORE_KEY);
+  const mixamoStore = usePickStore(MIXAMO_STORE_KEY);
+  const stockStore = usePickStore(STOCK_STORE_KEY);
 
-  const activeStore = mode === 'animation' ? animStore : ytStore;
-
+  // Aggregate status checks all four sources.
+  // Picked = at least one confirmed pick from any source.
+  // None   = at least one "none" mark with no picks from any source.
   const statusOf = useCallback(
     (id) => {
-      if (mode === 'animation') {
-        const p = animStore.store[id];
-        if (p === 'none') return 'none';
-        return p ? 'picked' : 'pending';
-      }
-      const e = ytStore.store[id];
-      if (e?.pick === 'none') return 'none';
-      return e?.pick ? 'picked' : 'pending';
+      const animPick = animStore.store[id];
+      const ytEntry = ytStore.store[id];
+      const mixamoPick = mixamoStore.store[id];
+      const stockEntry = stockStore.store[id];
+
+      const hasPick =
+        (animPick && animPick !== 'none') ||
+        (ytEntry?.pick && ytEntry.pick !== 'none') ||
+        (mixamoPick && mixamoPick !== 'none') ||
+        (stockEntry?.pick && stockEntry.pick !== 'none');
+      if (hasPick) return 'picked';
+
+      const hasNone =
+        animPick === 'none' ||
+        ytEntry?.pick === 'none' ||
+        mixamoPick === 'none' ||
+        stockEntry?.pick === 'none';
+      if (hasNone) return 'none';
+
+      return 'pending';
     },
-    [mode, animStore.store, ytStore.store],
+    [animStore.store, ytStore.store, mixamoStore.store, stockStore.store],
   );
 
   const allValue = '__all__';
@@ -97,13 +122,11 @@ export function SourcingPage({ showToast }) {
     setIndex(0);
   }
 
-  // Video counts over all loaded exercises (not affected by other filters).
-  const videoStats = useMemo(() => ({
-    with: exercises.filter((e) => e.hasVideo).length,
-    without: exercises.filter((e) => !e.hasVideo).length,
-  }), [exercises]);
+  const videoStats = useMemo(
+    () => ({ with: exercises.filter((e) => e.hasVideo).length, without: exercises.filter((e) => !e.hasVideo).length }),
+    [exercises],
+  );
 
-  // Filtered, ordered list the navigator walks through.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const f = dbFilters;
@@ -124,23 +147,19 @@ export function SourcingPage({ showToast }) {
     });
   }, [exercises, search, filter, hideCompleted, statusOf, dbFilters]);
 
-  // Keep the cursor in range as filters change.
   useEffect(() => {
     setIndex((i) => Math.min(Math.max(0, i), Math.max(0, filtered.length - 1)));
   }, [filtered.length]);
 
   const current = filtered[Math.min(index, Math.max(0, filtered.length - 1))] || null;
 
-  // Aggregate counts across ALL exercises for the active mode.
   const counts = useMemo(() => {
     const c = { picked: 0, pending: 0, none: 0 };
-    exercises.forEach((ex) => {
-      c[statusOf(ex.id)] += 1;
-    });
+    exercises.forEach((ex) => { c[statusOf(ex.id)] += 1; });
     return c;
   }, [exercises, statusOf]);
 
-  // ── YouTube fetching ───────────────────────────────────────────────────────
+  // ── YouTube fetching ────────────────────────────────────────────────────────
   const fetchYoutube = useCallback(
     async (ex, { force = false } = {}) => {
       if (!ex || !ytKey) return;
@@ -148,12 +167,13 @@ export function SourcingPage({ showToast }) {
       if (!force && entry?.candidates) return;
       setFetchingId(ex.id);
       try {
-        const { items, nextPageToken } = await searchYouTube(ytKey, ex.name);
+        const { items, nextPageToken } = await searchYouTube(ytKey, ex.name, undefined, ytMode);
         ytStore.update(ex.id, (prev) => ({
           candidates: items,
           pick: prev?.pick ?? null,
           pageToken: nextPageToken,
           clip: prev?.clip,
+          mode: ytMode,
         }));
       } catch (err) {
         showToast?.(ytErrorMessage(err), 'error');
@@ -161,7 +181,7 @@ export function SourcingPage({ showToast }) {
         setFetchingId(null);
       }
     },
-    [ytKey, ytStore, showToast],
+    [ytKey, ytMode, ytStore, showToast],
   );
 
   const searchOthers = useCallback(
@@ -170,24 +190,21 @@ export function SourcingPage({ showToast }) {
       setFetchingId(ex.id);
       try {
         const token = ytStore.store[ex.id]?.pageToken || undefined;
-        let { items, nextPageToken } = await searchYouTube(ytKey, ex.name, token);
+        let { items, nextPageToken } = await searchYouTube(ytKey, ex.name, token, ytMode);
         if (items.length === 0 && token) {
-          ({ items, nextPageToken } = await searchYouTube(ytKey, ex.name)); // wrap around
+          ({ items, nextPageToken } = await searchYouTube(ytKey, ex.name, undefined, ytMode));
         }
-        // New videos → reset the pick (it referenced an old url), keep any clip cleared.
-        ytStore.update(ex.id, () => ({ candidates: items, pick: null, pageToken: nextPageToken }));
-        showToast?.(items.length ? `New results loaded for ${ex.name}.` : `No more results for ${ex.name}.`, 'info');
+        ytStore.update(ex.id, () => ({ candidates: items, pick: null, pageToken: nextPageToken, mode: ytMode }));
+        showToast?.(items.length ? `New results for ${ex.name}.` : `No more results for ${ex.name}.`, 'info');
       } catch (err) {
         showToast?.(ytErrorMessage(err), 'error');
       } finally {
         setFetchingId(null);
       }
     },
-    [ytKey, ytStore, showToast],
+    [ytKey, ytMode, ytStore, showToast],
   );
 
-  // Auto-fetch the landed exercise's videos in YouTube mode — but not if it's
-  // already fetched or explicitly marked "none" (don't waste quota).
   useEffect(() => {
     if (mode !== 'youtube' || !current || !ytKey) return;
     const entry = ytStore.store[current.id];
@@ -195,7 +212,53 @@ export function SourcingPage({ showToast }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, current?.id, ytKey]);
 
-  // ── Pick handlers ────────────────────────────────────────────────────────
+  // ── Pexels stock fetching ───────────────────────────────────────────────────
+  const fetchStock = useCallback(
+    async (ex, { force = false } = {}) => {
+      if (!ex || !pexelsKey) return;
+      const entry = stockStore.store[ex.id];
+      if (!force && entry?.candidates) return;
+      setStockFetchingId(ex.id);
+      try {
+        const { items } = await searchPexels(pexelsKey, ex.name, 1);
+        stockStore.update(ex.id, (prev) => ({ ...(prev || {}), candidates: items, page: 1 }));
+      } catch (err) {
+        showToast?.(pexelsErrorMessage(err), 'error');
+      } finally {
+        setStockFetchingId(null);
+      }
+    },
+    [pexelsKey, stockStore, showToast],
+  );
+
+  const searchOthersStock = useCallback(
+    async (ex) => {
+      if (!ex || !pexelsKey) return;
+      setStockFetchingId(ex.id);
+      try {
+        const nextPage = (stockStore.store[ex.id]?.page || 1) + 1;
+        let { items } = await searchPexels(pexelsKey, ex.name, nextPage);
+        const page = items.length ? nextPage : 1;
+        if (!items.length) ({ items } = await searchPexels(pexelsKey, ex.name, 1));
+        stockStore.update(ex.id, () => ({ candidates: items, pick: null, page }));
+        showToast?.(items.length ? `New stock results for ${ex.name}.` : `No more results for ${ex.name}.`, 'info');
+      } catch (err) {
+        showToast?.(pexelsErrorMessage(err), 'error');
+      } finally {
+        setStockFetchingId(null);
+      }
+    },
+    [pexelsKey, stockStore, showToast],
+  );
+
+  useEffect(() => {
+    if (mode !== 'stock' || !current || !pexelsKey) return;
+    const entry = stockStore.store[current.id];
+    if (!entry?.candidates && entry?.pick !== 'none') fetchStock(current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, current?.id, pexelsKey]);
+
+  // ── Pick handlers ───────────────────────────────────────────────────────────
   const pickAnimation = useCallback(
     (candidate) => {
       if (!current) return;
@@ -223,6 +286,33 @@ export function SourcingPage({ showToast }) {
     });
   }, [current, ytStore]);
 
+  const pickMixamo = useCallback(
+    (animName) => {
+      if (!current) return;
+      mixamoStore.update(current.id, { animName, confirmed: true });
+    },
+    [current, mixamoStore],
+  );
+  const toggleMixamoNone = useCallback(() => {
+    if (!current) return;
+    mixamoStore.update(current.id, (prev) => (prev === 'none' ? undefined : 'none'));
+  }, [current, mixamoStore]);
+
+  const pickStock = useCallback(
+    (video) => {
+      if (!current) return;
+      stockStore.update(current.id, (prev) => ({ ...(prev || {}), pick: video }));
+    },
+    [current, stockStore],
+  );
+  const toggleStockNone = useCallback(() => {
+    if (!current) return;
+    stockStore.update(current.id, (prev) => {
+      const base = prev || {};
+      return { ...base, pick: base.pick === 'none' ? null : 'none' };
+    });
+  }, [current, stockStore]);
+
   const saveClip = useCallback(
     (clip) => {
       if (!clipId) return;
@@ -232,7 +322,7 @@ export function SourcingPage({ showToast }) {
     [clipId, ytStore],
   );
 
-  // ── Navigation ───────────────────────────────────────────────────────────
+  // ── Navigation ──────────────────────────────────────────────────────────────
   const goTo = useCallback(
     (i) => {
       setIndex(Math.min(Math.max(0, i), Math.max(0, filtered.length - 1)));
@@ -241,59 +331,52 @@ export function SourcingPage({ showToast }) {
     [filtered.length],
   );
 
-  // ── Export ───────────────────────────────────────────────────────────────
   const byId = useMemo(() => {
     const m = new Map();
     exercises.forEach((ex) => m.set(ex.id, ex));
     return m;
   }, [exercises]);
 
-  function handleExport() {
-    if (mode === 'animation') {
-      const picks = Object.entries(animStore.store)
-        .filter(([, v]) => v && v !== 'none')
-        .map(([id, v]) => ({ exercise: byId.get(id)?.name || id, exerciseId: id, ...v }));
-      if (!picks.length) {
-        showToast?.('No animation picks to export yet.', 'info');
-        return;
-      }
-      const { json, sh, count, reps: r } = buildAnimationExport(picks, reps);
-      downloadTextFile('gymifo_anim_picks.json', json);
-      downloadTextFile('download.sh', sh);
-      showToast?.(`Exported ${count} animation picks (looped to ${r} reps) → run: bash download.sh`, 'success');
-    } else {
-      const picks = Object.entries(ytStore.store)
-        .filter(([, v]) => v?.pick && v.pick !== 'none')
-        .map(([id, v]) => {
-          const c = (v.candidates || []).find((x) => x.url === v.pick);
-          return {
-            exercise: byId.get(id)?.name || id,
-            exerciseId: id,
-            url: v.pick,
-            title: c?.title || '',
-            channel: c?.channel || '',
-            clip: v.clip || null,
-          };
-        });
-      if (!picks.length) {
-        showToast?.('No YouTube picks to export yet.', 'info');
-        return;
-      }
-      const { json, sh, count, clipped } = buildYoutubeExport(picks);
-      downloadTextFile('gymifo_yt_picks.json', json);
-      downloadTextFile('download.sh', sh);
-      showToast?.(`Exported ${count} YouTube picks (${clipped} with clips) → run: bash download.sh`, 'success');
+  // ── Unified export ──────────────────────────────────────────────────────────
+  function handleUnifiedExport() {
+    const result = buildUnifiedExport({
+      exercises,
+      animStore: animStore.store,
+      ytStore: ytStore.store,
+      mixamoStore: mixamoStore.store,
+      stockStore: stockStore.store,
+      reps,
+    });
+
+    if (!result) {
+      showToast?.('No picks to export yet. Select videos from any source first.', 'info');
+      return;
     }
+
+    const { sh, json, manifest, mixamoItems, gifItems, ytItems, stockItems } = result;
+    downloadTextFile('picks_manifest.json', json);
+    downloadTextFile('download_all.sh', sh);
+    if (mixamoItems.length) downloadTextFile('render.py', buildBlenderScript(mixamoItems));
+
+    const breakdown = [
+      gifItems.length && `${gifItems.length} GIF`,
+      ytItems.length && `${ytItems.length} YouTube`,
+      mixamoItems.length && `${mixamoItems.length} Mixamo`,
+      stockItems.length && `${stockItems.length} Pexels`,
+    ].filter(Boolean).join(', ');
+
+    showToast?.(`Exported ${manifest.length} picks (${breakdown}) → run: bash download_all.sh`, 'success');
   }
 
   function handleClear() {
-    const label = mode === 'animation' ? 'animation' : 'YouTube';
-    if (!confirm(`Clear all ${label} picks? This cannot be undone.`)) return;
-    activeStore.clear();
-    showToast?.(`${label[0].toUpperCase()}${label.slice(1)} picks cleared.`, 'info');
+    const modeLabel = MODES.find((m) => m.key === mode)?.label || mode;
+    const store = { animation: animStore, youtube: ytStore, mixamo: mixamoStore, stock: stockStore }[mode];
+    if (!confirm(`Clear all ${modeLabel} picks? This cannot be undone.`)) return;
+    store?.clear();
+    showToast?.(`${modeLabel} picks cleared.`, 'info');
   }
 
-  // ── Keyboard shortcuts (latest-state via ref to avoid heavy re-binding) ──
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   const kbd = useRef({});
   kbd.current = {
     mode,
@@ -301,11 +384,17 @@ export function SourcingPage({ showToast }) {
     dataset,
     clipOpen: Boolean(clipId),
     ytEntry: current ? ytStore.store[current.id] : null,
+    stockEntry: current ? stockStore.store[current.id] : null,
     next: () => goTo(index + 1),
     prev: () => goTo(index - 1),
     pickAnimation,
     pickYoutube,
-    toggleNone: mode === 'animation' ? toggleAnimationNone : toggleYoutubeNone,
+    toggleNone: {
+      animation: toggleAnimationNone,
+      youtube: toggleYoutubeNone,
+      mixamo: toggleMixamoNone,
+      stock: toggleStockNone,
+    },
     openClip: () => {
       if (mode === 'youtube' && current) {
         const e = ytStore.store[current.id];
@@ -315,6 +404,10 @@ export function SourcingPage({ showToast }) {
     fetchYt: () => {
       if (mode !== 'youtube' || !current) return;
       ytStore.store[current.id]?.candidates ? searchOthers(current) : fetchYoutube(current);
+    },
+    fetchStock: () => {
+      if (mode !== 'stock' || !current) return;
+      stockStore.store[current.id]?.candidates ? searchOthersStock(current) : fetchStock(current);
     },
   };
 
@@ -326,67 +419,64 @@ export function SourcingPage({ showToast }) {
       if (k.clipOpen || !k.current) return;
       if (e.key === 'ArrowRight') k.next();
       else if (e.key === 'ArrowLeft') k.prev();
-      else if (e.key.toLowerCase() === 'n') k.toggleNone();
+      else if (e.key.toLowerCase() === 'n') k.toggleNone[k.mode]?.();
       else if (k.mode === 'youtube' && e.key.toLowerCase() === 'c') k.openClip();
       else if (k.mode === 'youtube' && e.key.toLowerCase() === 'f') k.fetchYt();
+      else if (k.mode === 'stock' && e.key.toLowerCase() === 'f') k.fetchStock();
       else if (e.key >= '1' && e.key <= '8') {
         const n = parseInt(e.key, 10);
         if (k.mode === 'animation') {
           const c = candidatesFor(k.current.name, k.dataset || [])[n - 1];
           if (c) k.pickAnimation(c);
-        } else if (n <= 6) {
+        } else if (k.mode === 'youtube' && n <= 6) {
           const c = k.ytEntry?.candidates?.[n - 1];
           if (c) k.pickYoutube(c.url);
+        } else if (k.mode === 'stock' && n <= 6) {
+          const c = k.stockEntry?.candidates?.[n - 1];
+          if (c) k.pickStock(c); // pickStock not in kbd.current yet — handled below
         }
       }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // Patch pickStock into kbd ref
+  kbd.current.pickStock = pickStock;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   const clipExercise = clipId ? byId.get(clipId) : null;
   const clipEntry = clipId ? ytStore.store[clipId] : null;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Header + mode tabs */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Sourcing</h1>
           <p className="text-sm text-muted-foreground">
-            Pick a reference per exercise, then export a download script. Final videos still upload on the Exercises tab.
+            Pick a reference per exercise across any source, then export a unified download script.
           </p>
         </div>
         <div className="inline-flex rounded-lg border border-border p-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={mode === 'animation' ? 'default' : 'ghost'}
-            onClick={() => {
-              setMode('animation');
-              setIndex(0);
-            }}
-          >
-            <Film className="size-4" /> Animations
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={mode === 'youtube' ? 'default' : 'ghost'}
-            onClick={() => {
-              setMode('youtube');
-              setIndex(0);
-            }}
-          >
-            <Video className="size-4" /> YouTube
-          </Button>
+          {MODES.map(({ key, label, icon: Icon }) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={mode === key ? 'default' : 'ghost'}
+              onClick={() => { setMode(key); setIndex(0); }}
+            >
+              <Icon className="size-4" /> {label}
+            </Button>
+          ))}
         </div>
       </div>
 
       {/* Controls */}
       <Card>
         <CardContent className="space-y-3 py-4">
-          {/* Row 1: search, sourcing status, video toggle, mode-specific, actions */}
+          {/* Row 1: search + sourcing-status + video + mode-specific inputs + actions */}
           <div className="flex flex-wrap items-center gap-3">
             <Input
               placeholder="Search exercises…"
@@ -403,12 +493,13 @@ export function SourcingPage({ showToast }) {
                 <SelectItem value="none">Marked none</SelectItem>
               </SelectContent>
             </Select>
-            {/* Video filter — prominent button toggle */}
+
+            {/* Video filter toggle */}
             <div className="inline-flex rounded-lg border border-border text-sm">
               {[
-                ['', `All videos${exercises.length ? ` (${exercises.length})` : ''}`],
-                ['with', `Has video${exercises.length ? ` (${videoStats.with})` : ''}`],
-                ['without', `No video${exercises.length ? ` (${videoStats.without})` : ''}`],
+                ['', `All (${exercises.length})`],
+                ['with', `Has video (${videoStats.with})`],
+                ['without', `No video (${videoStats.without})`],
               ].map(([v, label]) => (
                 <button
                   key={v}
@@ -422,33 +513,62 @@ export function SourcingPage({ showToast }) {
                 </button>
               ))}
             </div>
+
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input type="checkbox" checked={hideCompleted} onChange={(e) => { setHideCompleted(e.target.checked); setIndex(0); }} />
               Hide with final video
             </label>
-            {mode === 'youtube' && (
-              <Input
-                type="password"
-                placeholder="YouTube Data API key…"
-                value={ytKey}
-                onChange={(e) => { const v = e.target.value.trim(); setYtKey(v); localStorage.setItem(YT_API_KEY_STORE, v); }}
-                className="w-52"
-              />
-            )}
+
+            {/* Mode-specific controls */}
             {mode === 'animation' && (
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 Reps per clip
                 <Input type="number" min={1} max={10} value={reps} onChange={(e) => setReps(e.target.value)} className="w-16" />
               </label>
             )}
+            {mode === 'youtube' && (
+              <>
+                <Input
+                  type="password"
+                  placeholder="YouTube Data API key…"
+                  value={ytKey}
+                  onChange={(e) => { const v = e.target.value.trim(); setYtKey(v); localStorage.setItem(YT_API_KEY_STORE, v); }}
+                  className="w-52"
+                />
+                <div className="inline-flex rounded-md border border-border text-sm">
+                  {[['demo', 'Quick demos'], ['tutorial', 'Tutorials']].map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setYtMode(v)}
+                      className={`px-2.5 py-1.5 first:rounded-l-md last:rounded-r-md transition-colors ${
+                        ytMode === v ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {mode === 'stock' && (
+              <Input
+                type="password"
+                placeholder="Pexels API key…"
+                value={pexelsKey}
+                onChange={(e) => { const v = e.target.value.trim(); setPexelsKey(v); localStorage.setItem(PEXELS_KEY_STORE, v); }}
+                className="w-52"
+              />
+            )}
+
             <div className="ml-auto flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
                 <b className="text-foreground">{counts.picked}</b> picked ·{' '}
                 <b className="text-foreground">{counts.pending}</b> pending ·{' '}
                 <b className="text-foreground">{counts.none}</b> none
               </span>
-              <Button type="button" variant="outline" onClick={handleExport}>
-                <Download className="size-4" /> Export
+              <Button type="button" variant="outline" onClick={handleUnifiedExport}>
+                <Download className="size-4" /> Export all
               </Button>
               <Button type="button" variant="outline" onClick={handleClear}>
                 <Trash2 className="size-4" /> Clear
@@ -456,7 +576,7 @@ export function SourcingPage({ showToast }) {
             </div>
           </div>
 
-          {/* Row 2: exercise property filters (same as Exercises tab) */}
+          {/* Row 2: exercise property filters */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
             <Select value={dbFilters.muscleGroup || allValue} onValueChange={(v) => updateDbFilter('muscleGroup', v)}>
               <SelectTrigger><SelectValue placeholder="Muscle group" /></SelectTrigger>
@@ -520,17 +640,33 @@ export function SourcingPage({ showToast }) {
         </CardContent>
       </Card>
 
-      {mode === 'youtube' && (
-        <p className="text-xs text-muted-foreground">
-          The API key is stored in your browser and sent directly to the YouTube Data API. Restrict it in Google Cloud to
-          the YouTube Data API v3 + an HTTP-referrer allowlist. Shortcuts: ←/→ nav · 1–6 select · C clip · N none · F
-          fetch/refresh.
-        </p>
-      )}
+      {/* Mode hints */}
       {mode === 'animation' && (
         <p className="text-xs text-muted-foreground">
-          Source: ExerciseDB via jsDelivr CDN (no key). Verify licensing before commercial launch. Shortcuts: ←/→ nav ·
-          1–8 select · N none.
+          Source: ExerciseDB via jsDelivr CDN (no key needed). Verify licensing before commercial launch.
+          Shortcuts: ←/→ navigate · 1–8 select · N none.
+        </p>
+      )}
+      {mode === 'youtube' && (
+        <p className="text-xs text-muted-foreground">
+          The API key is stored in your browser and sent directly to YouTube Data API. Restrict it in Google Cloud to the
+          YouTube Data API v3 + HTTP-referrer allowlist. <b>Quick demos</b> searches short (&lt;4 min) clips; <b>Tutorials</b>
+          searches longer (4–20 min) ones.
+          Shortcuts: ←/→ nav · 1–6 select · C clip · N none · F fetch/refresh.
+        </p>
+      )}
+      {mode === 'mixamo' && (
+        <p className="text-xs text-muted-foreground">
+          Mixamo has no public API — use the panel below to confirm which animation to download from mixamo.com. Export
+          generates a Blender render script (<code>render.py</code>) + a list of FBX files to download.
+          Shortcuts: ←/→ navigate · N none.
+        </p>
+      )}
+      {mode === 'stock' && (
+        <p className="text-xs text-muted-foreground">
+          Free Pexels API (25k req/month) — get your key at pexels.com/api. Videos download via curl in the export
+          script. Pexels attribution required if published.
+          Shortcuts: ←/→ nav · 1–6 select · N none · F fetch/refresh.
         </p>
       )}
 
@@ -561,8 +697,7 @@ export function SourcingPage({ showToast }) {
                     const mark = s === 'picked' ? '✓ ' : s === 'none' ? '✗ ' : '• ';
                     return (
                       <SelectItem key={ex.id} value={String(i)}>
-                        {i + 1}. {mark}
-                        {ex.name}
+                        {i + 1}. {mark}{ex.name}
                       </SelectItem>
                     );
                   })}
@@ -572,12 +707,7 @@ export function SourcingPage({ showToast }) {
                 {index + 1} / {filtered.length}
               </span>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => goTo(index + 1)}
-              disabled={index >= filtered.length - 1}
-            >
+            <Button type="button" variant="outline" onClick={() => goTo(index + 1)} disabled={index >= filtered.length - 1}>
               Next <ChevronRight className="size-4" />
             </Button>
           </div>
@@ -585,6 +715,7 @@ export function SourcingPage({ showToast }) {
           {current && (
             <Card>
               <CardContent className="space-y-4 py-5">
+                {/* Exercise title + metadata */}
                 <div className="space-y-2 text-center">
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <span className="text-xl font-semibold">{current.name}</span>
@@ -595,28 +726,18 @@ export function SourcingPage({ showToast }) {
                       </span>
                     )}
                   </div>
-                  {/* Exercise metadata */}
                   <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    {current.muscleGroup && (
-                      <span><span className="font-medium text-foreground/60">Muscle</span> {current.muscleGroup}</span>
-                    )}
-                    {current.equipment && (
-                      <span><span className="font-medium text-foreground/60">Equipment</span> {current.equipment}</span>
-                    )}
-                    {current.bodyPart && (
-                      <span><span className="font-medium text-foreground/60">Body part</span> {current.bodyPart}</span>
-                    )}
-                    {current.exerciseType && (
-                      <span><span className="font-medium text-foreground/60">Type</span> {current.exerciseType}</span>
-                    )}
-                    {current.difficulty && (
-                      <span><span className="font-medium text-foreground/60">Difficulty</span> {current.difficulty}</span>
-                    )}
+                    {current.muscleGroup && <span><span className="font-medium text-foreground/60">Muscle</span> {current.muscleGroup}</span>}
+                    {current.equipment && <span><span className="font-medium text-foreground/60">Equipment</span> {current.equipment}</span>}
+                    {current.bodyPart && <span><span className="font-medium text-foreground/60">Body part</span> {current.bodyPart}</span>}
+                    {current.exerciseType && <span><span className="font-medium text-foreground/60">Type</span> {current.exerciseType}</span>}
+                    {current.difficulty && <span><span className="font-medium text-foreground/60">Difficulty</span> {current.difficulty}</span>}
                     <span><span className="font-medium text-foreground/60">Warmup</span> {current.isWarmup ? 'Yes' : 'No'}</span>
                   </div>
                 </div>
 
-                {mode === 'animation' ? (
+                {/* Source panels */}
+                {mode === 'animation' && (
                   <AnimationPanel
                     exercise={current}
                     dataset={dataset}
@@ -626,7 +747,8 @@ export function SourcingPage({ showToast }) {
                     onPick={pickAnimation}
                     onToggleNone={toggleAnimationNone}
                   />
-                ) : (
+                )}
+                {mode === 'youtube' && (
                   <YoutubePanel
                     exercise={current}
                     entry={ytStore.store[current.id]}
@@ -637,6 +759,27 @@ export function SourcingPage({ showToast }) {
                     onPick={pickYoutube}
                     onToggleNone={toggleYoutubeNone}
                     onOpenClip={() => setClipId(current.id)}
+                  />
+                )}
+                {mode === 'mixamo' && (
+                  <MixamoPanel
+                    exercise={current}
+                    pick={mixamoStore.store[current.id]}
+                    suggestedName={suggestMixamoName(current.name)}
+                    onConfirm={pickMixamo}
+                    onToggleNone={toggleMixamoNone}
+                  />
+                )}
+                {mode === 'stock' && (
+                  <StockPanel
+                    exercise={current}
+                    entry={stockStore.store[current.id]}
+                    pexelsKey={pexelsKey}
+                    fetching={stockFetchingId === current.id}
+                    onFetch={() => fetchStock(current)}
+                    onSearchOthers={() => searchOthersStock(current)}
+                    onPick={pickStock}
+                    onToggleNone={toggleStockNone}
                   />
                 )}
               </CardContent>
