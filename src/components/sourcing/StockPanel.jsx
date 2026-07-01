@@ -84,15 +84,15 @@ export function StockPanel({ exercise, entry, pexelsKey, fetching, onFetch, onSe
                 <span className="absolute left-1.5 top-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-background/80 text-xs font-medium">
                   {i + 1}
                 </span>
-                <img
-                  src={v.thumbnail}
-                  alt=""
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  poster={v.thumbnail}
+                  controls
+                  preload="none"
                   className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-                <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-xs text-white">
-                  {v.duration}s
-                </span>
+                >
+                  <source src={v.downloadUrl} type="video/mp4" />
+                </video>
               </div>
               <div className="flex flex-1 flex-col gap-2 p-2.5">
                 <p className="truncate text-xs text-muted-foreground">

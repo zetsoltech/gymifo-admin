@@ -77,7 +77,7 @@ export function SourcingPage({ showToast }) {
   const [clipId, setClipId] = useState(null);
 
   const { data: exercises = [], isLoading, isError } = useSourcingExercises();
-  const { data: dataset, isLoading: datasetLoading, isError: datasetError } = useExerciseDbDataset(mode === 'animation');
+  const { data: dataset, isLoading: datasetLoading, isError: datasetError, refetch: refetchDataset } = useExerciseDbDataset(mode === 'animation');
   const lookupsQuery = useLookupsQuery();
   const lookups = lookupsQuery.data ?? { muscleGroups: [], equipment: [], exerciseTypes: [], difficultyLevels: [], bodyParts: [] };
   const toArr = (v) => (Array.isArray(v) ? v : []);
@@ -743,6 +743,7 @@ export function SourcingPage({ showToast }) {
                     dataset={dataset}
                     datasetLoading={datasetLoading}
                     datasetError={datasetError}
+                    onRetry={refetchDataset}
                     pick={animStore.store[current.id]}
                     onPick={pickAnimation}
                     onToggleNone={toggleAnimationNone}

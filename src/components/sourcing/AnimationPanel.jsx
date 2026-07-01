@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Check } from 'lucide-react';
+import { Check, RotateCcw } from 'lucide-react';
 import { candidatesFor } from '../../lib/sourcing.js';
 import { Button } from '@/components/ui/button';
 
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
  * marks "none good"). GIF frames keep a white background because the ExerciseDB
  * renders assume a light surface.
  */
-export function AnimationPanel({ exercise, dataset, datasetLoading, datasetError, pick, onPick, onToggleNone }) {
+export function AnimationPanel({ exercise, dataset, datasetLoading, datasetError, onRetry, pick, onPick, onToggleNone }) {
   const candidates = useMemo(
     () => candidatesFor(exercise.name, dataset || []),
     [exercise.name, dataset],
@@ -22,9 +22,16 @@ export function AnimationPanel({ exercise, dataset, datasetLoading, datasetError
   }
   if (datasetError) {
     return (
-      <p className="px-1 py-10 text-center text-sm text-destructive">
-        Failed to load the ExerciseDB dataset — check your connection and reload.
-      </p>
+      <div className="space-y-3 px-1 py-10 text-center">
+        <p className="text-sm text-destructive">
+          Failed to load the ExerciseDB dataset — check your connection.
+        </p>
+        {onRetry && (
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            <RotateCcw className="size-4" /> Retry
+          </Button>
+        )}
+      </div>
     );
   }
 
