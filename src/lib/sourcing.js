@@ -509,27 +509,17 @@ mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/s
 
   if (animaticItems.length) {
     sh += `# ── ExerciseAnimatic.com ──────────────────────────────────────────────────\n`;
-    sh += `# Video URLs are captured via Preview → right-click video → Copy Video Address.\n`;
-    sh += `#\n`;
-    sh += `# Watermark removal (for private AI/pose reference use):\n`;
-    sh += `#   Step 1 — calibrate: run with SHOW=1 to see a coloured box over the mask area,\n`;
-    sh += `#             adjust X/Y/W/H until it covers the watermark, then set SHOW=0.\n`;
-    sh += `#   Step 2 — run with SHOW=0 to inpaint and write the clean file.\n`;
-    sh += `# WM_X/Y/W/H defaults target a typical bottom-centre text watermark — adjust as needed.\n`;
-    sh += `WM_X=200 WM_Y=850 WM_W=880 WM_H=60 SHOW=0   # tweak to match watermark position\n\n`;
+    sh += `# Video URLs are only available after JS renders the page in a browser.\n`;
+    sh += `# To capture: open Preview in the admin, right-click the video → Copy Video Address,\n`;
+    sh += `# paste into the video URL field, then re-export.\n`;
     for (const p of animaticItems) {
       const s = safeName(p.exercise);
       if (p.videoUrl) {
-        sh +=
-          `curl -fL -A "Mozilla/5.0" -H "Referer: https://www.exerciseanimatic.com/" \\\n` +
-          `  "${p.videoUrl}" -o "downloads/animatic/${s}_wm.mp4" \\\n` +
-          `  && echo "OK download: ${p.exercise}" || echo "WARN: URL expired — re-preview and re-export"\n` +
-          `ffmpeg -y -i "downloads/animatic/${s}_wm.mp4" \\\n` +
-          `  -vf "delogo=x=$WM_X:y=$WM_Y:w=$WM_W:h=$WM_H:show=$SHOW" \\\n` +
-          `  -c:v libx264 -preset fast -crf 18 -movflags +faststart \\\n` +
-          `  "downloads/animatic/${s}.mp4" && rm "downloads/animatic/${s}_wm.mp4"\n\n`;
+        sh += `curl -fL -A "Mozilla/5.0" -H "Referer: https://www.exerciseanimatic.com/" \\\n`;
+        sh += `  "${p.videoUrl}" -o "downloads/animatic/${s}.mp4" \\\n`;
+        sh += `  && echo "OK: ${p.exercise}" || echo "WARN: URL expired for ${p.exercise} — re-preview and re-export"\n\n`;
       } else {
-        sh += `# ${p.exercise}: no video URL — open ${p.url} , right-click video → Copy Video Address, paste in admin\n\n`;
+        sh += `# ${p.exercise}: no video URL saved — open ${p.url} , right-click video → Copy Video Address, paste in admin\n\n`;
       }
     }
   }
