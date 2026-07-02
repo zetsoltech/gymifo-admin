@@ -432,7 +432,7 @@ export function buildUnifiedExport({ exercises, animStore, ytStore, mixamoStore,
       manifest.push({ exercise: ex.name, exerciseId: id, source: 'pexels', downloadUrl: sp.downloadUrl, videoId: sp.id, duration: sp.duration });
     }
     if (animaticPick && animaticPick !== 'none') {
-      manifest.push({ exercise: ex.name, exerciseId: id, source: 'exerciseanimatic', url: animaticPick.url, slug: animaticPick.slug });
+      manifest.push({ exercise: ex.name, exerciseId: id, source: 'exerciseanimatic', url: animaticPick.url, slug: animaticPick.slug, videoUrl: animaticPick.videoUrl || null });
     }
   }
 
@@ -509,21 +509,18 @@ mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/s
 
   if (animaticItems.length) {
     sh += `# ── ExerciseAnimatic.com ──────────────────────────────────────────────────\n`;
-    sh += `# Fetches each product page, extracts the embedded Wix video path, then\n`;
-    sh += `# downloads from video.wixstatic.com. Videos are publicly hosted on the Wix CDN.\n`;
-    const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    sh += `# Video URLs are only available after JS renders the page in a browser.\n`;
+    sh += `# To capture: open Preview in the admin, right-click the video → Copy Video Address,\n`;
+    sh += `# paste into the video URL field, then re-export.\n`;
     for (const p of animaticItems) {
       const s = safeName(p.exercise);
-      sh +=
-        `_html=$(curl -sL -A "${UA}" "${p.url}")\n` +
-        `_path=$(echo "$_html" | grep -oE '"video/[a-f0-9]+_[^"/]+/[0-9]+p/mp4/file\\.mp4"' | sort -t/ -k3 -Vr | head -1 | tr -d '"')\n` +
-        `if [ -n "$_path" ]; then\n` +
-        `  curl -fL -A "${UA}" -H "Referer: https://www.exerciseanimatic.com/" \\\n` +
-        `    "https://video.wixstatic.com/$_path" -o "downloads/animatic/${s}.mp4" \\\n` +
-        `  && echo "OK: ${p.exercise}" || echo "WARN: CDN blocked — open manually: ${p.url}"\n` +
-        `else\n` +
-        `  echo "WARN: video not found in page source — open manually: ${p.url}"\n` +
-        `fi\n\n`;
+      if (p.videoUrl) {
+        sh += `curl -fL -A "Mozilla/5.0" -H "Referer: https://www.exerciseanimatic.com/" \\\n`;
+        sh += `  "${p.videoUrl}" -o "downloads/animatic/${s}.mp4" \\\n`;
+        sh += `  && echo "OK: ${p.exercise}" || echo "WARN: URL expired for ${p.exercise} — re-preview and re-export"\n\n`;
+      } else {
+        sh += `# ${p.exercise}: no video URL saved — open ${p.url} , right-click video → Copy Video Address, paste in admin\n\n`;
+      }
     }
   }
 
