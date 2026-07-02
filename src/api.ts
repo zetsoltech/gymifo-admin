@@ -140,7 +140,7 @@ export type Recipe = {
 export type ListRecipesParams = {
   page?: number;
   limit?: number;
-  search?: string;
+  q?: string;
   mealType?: string;
   cuisine?: string;
   dietType?: string;
@@ -872,7 +872,7 @@ export async function listRecipes(params: ListRecipesParams = {}): Promise<Recip
   if (USE_MOCK_API) {
     const page = params.page || 1;
     const limit = params.limit || 12;
-    const search = params.search?.toLowerCase().trim();
+    const search = params.q?.toLowerCase().trim();
     const matchesLookupFilter = (lookup: LookupRef | string | undefined, value: string) => {
       if (!value) return true;
       if (!lookup) return false;
@@ -899,7 +899,7 @@ export async function listRecipes(params: ListRecipesParams = {}): Promise<Recip
     page: params.page || 1,
     limit: params.limit || 12,
     includeInactive: true,
-    search: params.search,
+    q: params.q,
     mealType: params.mealType,
     cuisine: params.cuisine,
     dietType: params.dietType,

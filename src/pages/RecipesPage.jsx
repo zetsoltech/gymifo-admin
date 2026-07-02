@@ -149,7 +149,7 @@ export function RecipesPage({ showToast }) {
   const queryParams = {
     page,
     limit: pageSize,
-    search: debouncedSearch,
+    q: debouncedSearch,
     mealType: filters.mealType,
     cuisine: filters.cuisine,
     dietType: filters.dietType,
