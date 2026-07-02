@@ -509,10 +509,22 @@ mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/s
 
   if (animaticItems.length) {
     sh += `# ── ExerciseAnimatic.com ──────────────────────────────────────────────────\n`;
+    sh += `# Fetches each product page, extracts the embedded Wix video path, then\n`;
+    sh += `# downloads from video.wixstatic.com. Videos are publicly hosted on the Wix CDN.\n`;
+    const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     for (const p of animaticItems) {
-      sh += `yt-dlp "${p.url}" -o "downloads/animatic/${safeName(p.exercise)}.%(ext)s" || echo "WARN: manual download needed for ${p.exercise} — ${p.url}"\n`;
+      const s = safeName(p.exercise);
+      sh +=
+        `_html=$(curl -sL -A "${UA}" "${p.url}")\n` +
+        `_path=$(echo "$_html" | grep -oE '"video/[a-f0-9]+_[^"/]+/[0-9]+p/mp4/file\\.mp4"' | sort -t/ -k3 -Vr | head -1 | tr -d '"')\n` +
+        `if [ -n "$_path" ]; then\n` +
+        `  curl -fL -A "${UA}" -H "Referer: https://www.exerciseanimatic.com/" \\\n` +
+        `    "https://video.wixstatic.com/$_path" -o "downloads/animatic/${s}.mp4" \\\n` +
+        `  && echo "OK: ${p.exercise}" || echo "WARN: CDN blocked — open manually: ${p.url}"\n` +
+        `else\n` +
+        `  echo "WARN: video not found in page source — open manually: ${p.url}"\n` +
+        `fi\n\n`;
     }
-    sh += '\n';
   }
 
   return { sh, json: JSON.stringify(manifest, null, 2), manifest, gifItems, ytItems, mixamoItems, stockItems, animaticItems };
