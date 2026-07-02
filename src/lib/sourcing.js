@@ -508,9 +508,9 @@ mkdir -p downloads/exercisedb downloads/youtube downloads/mixamo/fbx downloads/s
   }
 
   if (animaticItems.length) {
-    sh += `# ── ExerciseAnimatic.com — open in browser, save video manually ──────────\n`;
+    sh += `# ── ExerciseAnimatic.com ──────────────────────────────────────────────────\n`;
     for (const p of animaticItems) {
-      sh += `# ${safeName(p.exercise)}: ${p.url}\n`;
+      sh += `yt-dlp "${p.url}" -o "downloads/animatic/${safeName(p.exercise)}.%(ext)s" || echo "WARN: manual download needed for ${p.exercise} — ${p.url}"\n`;
     }
     sh += '\n';
   }
