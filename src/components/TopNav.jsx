@@ -62,7 +62,11 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
             >
               Sourcing
             </Button>
-            <Button type="button" variant="ghost" disabled>
+            <Button
+              type="button"
+              variant={activePage === 'users' ? 'default' : 'ghost'}
+              onClick={() => onNavigate('users')}
+            >
               Users
             </Button>
           </nav>
