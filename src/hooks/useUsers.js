@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import {
   createUser,
   listUsers,
-  resetUserPassword,
   updateUser,
 } from '../api.ts';
 
@@ -58,29 +57,6 @@ export function useUpdateUser() {
     onError: (error) => {
       toast.error(error?.message || 'Unable to update admin user.', {
         id: updateToastId,
-        duration: 6000,
-      });
-    },
-  });
-}
-
-const resetToastId = 'reset-password';
-
-/** Reset an admin user's password. */
-export function useResetPassword() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, newPassword }) => resetUserPassword(id, newPassword),
-    onMutate: () => {
-      toast.loading('Resetting password…', { id: resetToastId, duration: Infinity });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('Password reset successfully.', { id: resetToastId, duration: 4000 });
-    },
-    onError: (error) => {
-      toast.error(error?.message || 'Unable to reset password.', {
-        id: resetToastId,
         duration: 6000,
       });
     },

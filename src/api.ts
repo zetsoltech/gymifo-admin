@@ -1549,17 +1549,6 @@ export async function updateUser(id: string, payload: UpdateUserPayload): Promis
   });
 }
 
-export async function resetUserPassword(id: string, newPassword: string): Promise<unknown> {
-  if (USE_MOCK_API) {
-    return { ok: true };
-  }
-
-  return request(`/admin/users/${id}/password`, {
-    method: 'PUT',
-    body: JSON.stringify({ newPassword }),
-  });
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getDashboardOverview(period: DashboardPeriod = 'monthly'): Promise<unknown> {

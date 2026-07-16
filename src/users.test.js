@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createUser, resetUserPassword, updateUser } from './api.ts';
+import { createUser, updateUser } from './api.ts';
 import { isPasswordValid } from './components/UserFormModal.jsx';
 
 // api.ts touches localStorage (getToken) and fetch. Stub both — real mode (no
@@ -51,14 +51,6 @@ describe('other user endpoints', () => {
     expect(method).toBe('POST');
     expect(url).toMatch(/\/admin\/users$/);
     expect(body).toEqual({ email: 'a@b.com', fullName: 'Jane', password: 'StrongPass123', role: 'admin' });
-  });
-
-  it('resetUserPassword PUTs { newPassword } to the /password sub-route', async () => {
-    await resetUserPassword('u3', 'NewStrongPass456');
-    const { url, method, body } = lastRequest();
-    expect(method).toBe('PUT');
-    expect(url).toMatch(/\/admin\/users\/u3\/password$/);
-    expect(body).toEqual({ newPassword: 'NewStrongPass456' });
   });
 });
 

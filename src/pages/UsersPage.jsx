@@ -1,16 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   useCreateUser,
-  useResetPassword,
   useUpdateUser,
   useUsersQuery,
 } from '../hooks/useUsers.js';
 import { getCurrentUser } from '../api.ts';
-import {
-  UserFormModal,
-  EditUserModal,
-  ResetPasswordModal,
-} from '../components/UserFormModal.jsx';
+import { UserFormModal, EditUserModal } from '../components/UserFormModal.jsx';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { KeyRound, Pencil, Plus, ShieldCheck } from 'lucide-react';
+import { Pencil, Plus, ShieldCheck } from 'lucide-react';
 
 function userInitials(fullName) {
   if (!fullName) return '??';
@@ -62,7 +57,6 @@ export function UsersPage({ showToast }) {
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // user object
-  const [resetTarget, setResetTarget] = useState(null); // { id, fullName }
 
   const { data, isLoading, isFetching } = useUsersQuery({
     page: 1,
@@ -72,7 +66,6 @@ export function UsersPage({ showToast }) {
   });
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
-  const resetMutation = useResetPassword();
 
   const users = data?.users || [];
 
@@ -105,14 +98,6 @@ export function UsersPage({ showToast }) {
     updateMutation.mutate(
       { id: editTarget.id, payload },
       { onSuccess: () => setEditTarget(null) },
-    );
-  }
-
-  function handleResetPassword(newPassword) {
-    if (!resetTarget) return;
-    resetMutation.mutate(
-      { id: resetTarget.id, newPassword },
-      { onSuccess: () => setResetTarget(null) },
     );
   }
 
@@ -205,7 +190,7 @@ export function UsersPage({ showToast }) {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              {canEditRow(user) && (
+                              {canEditRow(user) ? (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -214,20 +199,7 @@ export function UsersPage({ showToast }) {
                                   <Pencil className="mr-1.5 h-4 w-4" />
                                   Edit
                                 </Button>
-                              )}
-                              {isSuperAdmin && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    setResetTarget({ id: user.id, fullName: user.fullName })
-                                  }
-                                >
-                                  <KeyRound className="mr-1.5 h-4 w-4" />
-                                  Reset Password
-                                </Button>
-                              )}
-                              {!canEditRow(user) && !isSuperAdmin && (
+                              ) : (
                                 <span className="text-sm text-muted-foreground">—</span>
                               )}
                             </div>
@@ -257,16 +229,6 @@ export function UsersPage({ showToast }) {
         canEditAll={isSuperAdmin}
         onSave={handleUpdate}
         saving={updateMutation.isPending}
-      />
-
-      <ResetPasswordModal
-        open={Boolean(resetTarget)}
-        onOpenChange={(open) => {
-          if (!open) setResetTarget(null);
-        }}
-        userName={resetTarget?.fullName || ''}
-        onReset={handleResetPassword}
-        resetting={resetMutation.isPending}
       />
     </>
   );
