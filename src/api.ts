@@ -8,6 +8,7 @@ const RECOMMENDATIONS_STORAGE_KEY = 'gymifo_recommendations';
 const TOKEN_KEY = 'gymifo_token';
 const REFRESH_TOKEN_KEY = 'gymifo_refresh_token';
 const USER_EMAIL_KEY = 'gymifo_admin_email';
+const USERS_STORAGE_KEY = 'gymifo_users';
 
 export type LookupRef = {
   id: string;
@@ -243,17 +244,68 @@ export type SaveRecommendationPayload = {
   isActive?: boolean;
 };
 
+// ─── User Types ─────────────────────────────────────────────────────────────
+
+export type UserRole = {
+  id: string;
+  name: string;
+};
+
+export type User = {
+  id: string;
+  fullName: string;
+  email: string;
+  createdAt?: string;
+  updatedAt?: string;
+  role?: UserRole;
+  password?: string;
+  passwordChangedAt?: string;
+};
+
+export type ListUsersParams = {
+  page?: number;
+  limit?: number;
+  sortBy?: 'createdAt' | 'fullName' | 'email';
+  sortOrder?: 'ASC' | 'DESC';
+};
+
+export type UserListResponse = {
+  users: User[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type CreateUserPayload = {
+  email: string;
+  fullName: string;
+  password: string;
+  role: string;
+};
+
+// All optional — send only what changes. Backend enforces who may set what:
+// admin may set fullName on their own id only; super-admin may set any field on anyone.
+export type UpdateUserPayload = {
+  fullName?: string;
+  password?: string;
+  role?: string;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type DashboardPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 type LoginResponse = {
   access_token?: string;
+  accessToken?: string;
   refresh_token?: string;
+  refreshToken?: string;
   token?: string;
   data?: {
     access_token?: string;
+    accessToken?: string;
     refresh_token?: string;
+    refreshToken?: string;
     token?: string;
   };
 };
@@ -444,6 +496,34 @@ function saveMockRecommendations(recommendations: Recommendation[]): void {
   localStorage.setItem(RECOMMENDATIONS_STORAGE_KEY, JSON.stringify(recommendations));
 }
 
+const seedUsers: User[] = [
+  {
+    id: 'mock-1',
+    fullName: 'Super Admin',
+    email: 'superadmin@gymifo.com',
+    createdAt: '2025-06-01T08:00:00.000Z',
+    updatedAt: '2025-06-01T08:00:00.000Z',
+    role: { id: 'role-sa', name: 'super-admin' },
+  },
+  {
+    id: 'mock-2',
+    fullName: 'Jane Admin',
+    email: 'jane.admin@gymifo.com',
+    createdAt: '2026-01-15T10:30:00.000Z',
+    updatedAt: '2026-01-15T10:30:00.000Z',
+    role: { id: 'role-a', name: 'admin' },
+  },
+];
+
+function getMockUsers(): User[] {
+  const saved = localStorage.getItem(USERS_STORAGE_KEY);
+  return saved ? JSON.parse(saved) as User[] : seedUsers;
+}
+
+function saveMockUsers(users: User[]): void {
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+}
+
 function normalizeErrorMessage(payload: RequestErrorPayload | null): string {
   if (Array.isArray(payload?.message)) return payload.message.join(', ');
   return payload?.message || payload?.error || 'Request failed';
@@ -524,8 +604,8 @@ export async function login(email: string, password: string): Promise<LoginRespo
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  const accessToken = data.access_token || data.token || data.data?.access_token || data.data?.token || '';
-  const refreshToken = data.refresh_token || data.data?.refresh_token || '';
+  const accessToken = data.access_token || data.accessToken || data.token || data.data?.access_token || data.data?.accessToken || data.data?.token || '';
+  const refreshToken = data.refresh_token || data.refreshToken || data.data?.refresh_token || data.data?.refreshToken || '';
   if (!accessToken) throw new Error('Login response did not include an access token.');
   localStorage.setItem(TOKEN_KEY, accessToken);
   localStorage.setItem(USER_EMAIL_KEY, email);
@@ -1396,6 +1476,76 @@ export async function setRecommendationActive(id: string | number, isActive: boo
   return request(`${RECOMMENDATION_EXERCISES_PATH}/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ isActive }),
+  });
+}
+
+// ─── Users API ──────────────────────────────────────────────────────────────
+
+export async function listUsers(params: ListUsersParams = {}): Promise<UserListResponse> {
+  if (USE_MOCK_API) {
+    const all = getMockUsers();
+    return { users: all, total: all.length, page: 1, limit: all.length };
+  }
+
+  const data = await request<User[] | { data?: User[] }>(withQuery('/admin/users', {
+    page: params.page || 1,
+    limit: params.limit || 100,
+    sortBy: params.sortBy || 'createdAt',
+    sortOrder: params.sortOrder || 'DESC',
+  }));
+
+  const users = Array.isArray(data) ? data : asArray<User>(data);
+  return {
+    users,
+    total: users.length,
+    page: params.page || 1,
+    limit: params.limit || users.length || 100,
+  };
+}
+
+export async function createUser(payload: CreateUserPayload): Promise<unknown> {
+  if (USE_MOCK_API) {
+    const users = getMockUsers();
+    const newId = `mock-${Date.now()}`;
+    users.push({
+      id: newId,
+      fullName: payload.fullName,
+      email: payload.email,
+      role: { id: `role-${payload.role}`, name: payload.role },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    saveMockUsers(users);
+    return { ok: true };
+  }
+
+  return request('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: payload.email,
+      fullName: payload.fullName,
+      password: payload.password,
+      role: payload.role,
+    }),
+  });
+}
+
+export async function updateUser(id: string, payload: UpdateUserPayload): Promise<unknown> {
+  if (USE_MOCK_API) {
+    const users = getMockUsers();
+    const target = users.find((u) => u.id === id);
+    if (target) {
+      if (payload.fullName !== undefined) target.fullName = payload.fullName;
+      if (payload.role !== undefined) target.role = { id: `role-${payload.role}`, name: payload.role };
+      target.updatedAt = new Date().toISOString();
+      saveMockUsers(users);
+    }
+    return { ok: true };
+  }
+
+  return request(`/admin/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   });
 }
 
