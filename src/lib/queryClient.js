@@ -40,14 +40,18 @@ export const queryClient = new QueryClient({
     },
   },
   // Toast any failed data load automatically (end-to-end error surfacing).
+  // An expired session is skipped — parallel queries would stack one toast
+  // each, and App already shows a single re-login dialog for it.
   queryCache: new QueryCache({
     onError: (error) => {
+      if (error?.code === 'SESSION_EXPIRED') return;
       toast.error(error?.message || 'Unable to load data.');
     },
   }),
   // Toast any failed mutation automatically.
   mutationCache: new MutationCache({
     onError: (error) => {
+      if (error?.code === 'SESSION_EXPIRED') return;
       toast.error(error?.message || 'Action failed.');
     },
   }),

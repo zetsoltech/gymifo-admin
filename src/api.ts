@@ -540,7 +540,61 @@ async function parseJsonResponse<T>(res: Response): Promise<T> {
   return payload as T;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export const SESSION_EXPIRED_EVENT = 'gymifo:session-expired';
+
+function extractTokens(payload: LoginResponse | null) {
+  const data = payload || {};
+  return {
+    accessToken: data.access_token || data.accessToken || data.token || data.data?.access_token || data.data?.accessToken || data.data?.token || '',
+    refreshToken: data.refresh_token || data.refreshToken || data.data?.refresh_token || data.data?.refreshToken || '',
+  };
+}
+
+// The backend rotates on refresh — issuing a token pair revokes every other
+// session row for the user. Parallel refreshes would therefore invalidate each
+// other, so all concurrent 401s wait on one shared call.
+let refreshInFlight: Promise<string> | null = null;
+
+async function fetchNewAccessToken(): Promise<string> {
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (!refreshToken) return '';
+
+  // Raw fetch, not request() — keeps a failing refresh from recursing.
+  const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept-Language': ACCEPT_LANGUAGE },
+    body: JSON.stringify({ refreshToken }),
+  }).catch(() => null);
+  if (!res?.ok) return '';
+
+  const payload = await res.json().catch(() => null) as LoginResponse | null;
+  const tokens = extractTokens(payload);
+  if (!tokens.accessToken) return '';
+
+  localStorage.setItem(TOKEN_KEY, tokens.accessToken);
+  if (tokens.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  return tokens.accessToken;
+}
+
+function refreshAccessToken(): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetchNewAccessToken().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+function sessionExpiredError(): Error {
+  logout();
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  // Tagged with a code, not a message — the backend localizes its 401 text.
+  return Object.assign(new Error('Your session has ended. Please sign in again.'), {
+    code: 'SESSION_EXPIRED',
+  });
+}
+
+async function request<T>(path: string, options: RequestInit = {}, allowRetry = true): Promise<T> {
   const headers = new Headers(options.headers || {});
   const token = getToken();
 
@@ -555,9 +609,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers,
   });
 
-  if (res.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  // A 401 on /auth/* is a real credential failure (bad password), not an
+  // expired session — let it surface as a normal error.
+  if (res.status === 401 && token && !path.startsWith('/auth/')) {
+    if (allowRetry && (await refreshAccessToken())) return request<T>(path, options, false);
+    throw sessionExpiredError();
   }
 
   return parseJsonResponse<T>(res);
@@ -604,8 +660,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  const accessToken = data.access_token || data.accessToken || data.token || data.data?.access_token || data.data?.accessToken || data.data?.token || '';
-  const refreshToken = data.refresh_token || data.refreshToken || data.data?.refresh_token || data.data?.refreshToken || '';
+  const { accessToken, refreshToken } = extractTokens(data);
   if (!accessToken) throw new Error('Login response did not include an access token.');
   localStorage.setItem(TOKEN_KEY, accessToken);
   localStorage.setItem(USER_EMAIL_KEY, email);
