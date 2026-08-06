@@ -64,6 +64,13 @@ export function TopNav({ activePage, onNavigate, onLogout }) {
             </Button>
             <Button
               type="button"
+              variant={activePage === 'video-qa' ? 'default' : 'ghost'}
+              onClick={() => onNavigate('video-qa')}
+            >
+              Video QA
+            </Button>
+            <Button
+              type="button"
               variant={activePage === 'users' ? 'default' : 'ghost'}
               onClick={() => onNavigate('users')}
             >

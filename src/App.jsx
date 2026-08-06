@@ -8,6 +8,7 @@ import { RecipesPage } from './pages/RecipesPage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
 import { SourcingPage } from './pages/SourcingPage.jsx';
 import { UsersPage } from './pages/UsersPage.jsx';
+import { VideoQaPage } from './pages/VideoQaPage.jsx';
 import { TopNav } from './components/TopNav.jsx';
 import { Toaster } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,7 @@ export default function App() {
         {activePage === 'recommendations' && <RecommendationsPage showToast={showToast} />}
         {activePage === 'sourcing' && <SourcingPage showToast={showToast} />}
         {activePage === 'users' && <UsersPage showToast={showToast} />}
+        {activePage === 'video-qa' && <VideoQaPage />}
       </main>
 
       {/* Not dismissible — behind it every request 401s, so there is nothing

@@ -7,6 +7,7 @@ import {
   listLookups,
   saveExercise,
   setExerciseActive,
+  setExerciseQa,
 } from '../api.ts';
 
 const exercisesKey = (params) => ['exercises', params];
@@ -189,5 +190,44 @@ export function useToggleExerciseActive() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['exercises'] });
     },
+  });
+}
+
+/**
+ * Save a QA review (Pass / Needs Improvement + severity / Wrong) with an
+ * optimistic update so the grid card reflects the choice instantly — no
+ * page reload, no waiting on the network round trip.
+ */
+export function useSetExerciseQa() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, qaStatus, qaSeverity }) => setExerciseQa(id, qaStatus, qaSeverity),
+    onMutate: async ({ id, qaStatus, qaSeverity }) => {
+      await queryClient.cancelQueries({ queryKey: ['exercises'] });
+      const snapshots = queryClient.getQueriesData({ queryKey: ['exercises'] });
+      snapshots.forEach(([key, data]) => {
+        if (!data || !Array.isArray(data.exercises)) return;
+        queryClient.setQueryData(key, {
+          ...data,
+          exercises: data.exercises.map((exercise) =>
+            String(exercise.id ?? exercise._id) === String(id)
+              ? { ...exercise, qaStatus, qaSeverity: qaStatus === 'needs_improvement' ? qaSeverity : null }
+              : exercise,
+          ),
+        });
+      });
+      return { snapshots };
+    },
+    onError: (_error, _variables, context) => {
+      context?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      toast.error('Could not save review — reverted.');
+    },
+    onSuccess: () => {
+      toast.success('Review saved.');
+    },
+    // No invalidate-on-settle here on purpose: the optimistic value is already
+    // correct, and this page is reviewed rapid-fire — a background refetch per
+    // click would just be wasted requests. The Exercises tab still gets fresh
+    // data next time it mounts.
   });
 }

@@ -48,7 +48,12 @@ export type Exercise = {
   environment?: string;
   createdAt?: string;
   _id?: string;
+  qaStatus?: QaStatus;
+  qaSeverity?: QaSeverity | null;
 };
+
+export type QaStatus = 'unreviewed' | 'pass' | 'needs_improvement' | 'wrong';
+export type QaSeverity = 'high' | 'medium' | 'low';
 
 export type ListExercisesParams = {
   page?: number;
@@ -62,6 +67,8 @@ export type ListExercisesParams = {
   isWarmup?: boolean;
   isActive?: boolean;
   hasVideo?: boolean;
+  qaStatus?: QaStatus;
+  qaSeverity?: QaSeverity;
   sortBy?: 'name' | 'met' | 'createdAt';
   sortOrder?: 'ASC' | 'DESC';
 };
@@ -711,6 +718,8 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
       if (params.isWarmup !== undefined && Boolean(exercise.isWarmup) !== params.isWarmup) return false;
       if (params.isActive !== undefined && (exercise.isActive !== false) !== params.isActive) return false;
       if (params.hasVideo !== undefined && Boolean(exercise.videoUrl) !== params.hasVideo) return false;
+      if (params.qaStatus !== undefined && (exercise.qaStatus || 'unreviewed') !== params.qaStatus) return false;
+      if (params.qaSeverity !== undefined && exercise.qaSeverity !== params.qaSeverity) return false;
       return true;
     });
     const start = (page - 1) * limit;
@@ -735,6 +744,8 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
     isWarmup: params.isWarmup,
     isActive: params.isActive,
     hasVideo: params.hasVideo,
+    qaStatus: params.qaStatus,
+    qaSeverity: params.qaSeverity,
     sortBy: params.sortBy || 'createdAt',
     sortOrder: params.sortOrder || 'DESC',
   }));
@@ -770,6 +781,28 @@ export async function listExercises(params: ListExercisesParams = {}): Promise<E
     page: Number(response.page ?? params.page ?? 1),
     limit: Number(response.limit ?? params.limit ?? 12),
   };
+}
+
+export async function setExerciseQa(
+  id: string | number,
+  qaStatus: QaStatus,
+  qaSeverity?: QaSeverity | null,
+): Promise<{ ok: boolean } | unknown> {
+  if (USE_MOCK_API) {
+    const exercises = getMockExercises();
+    const existing = exercises.find((item) => String(item.id) === String(id));
+    if (existing) {
+      existing.qaStatus = qaStatus;
+      existing.qaSeverity = qaStatus === 'needs_improvement' ? (qaSeverity ?? null) : null;
+      saveMockExercises(exercises);
+    }
+    return { ok: true };
+  }
+
+  return request(`/exercises/${id}/qa`, {
+    method: 'PATCH',
+    body: JSON.stringify({ qaStatus, qaSeverity: qaStatus === 'needs_improvement' ? (qaSeverity ?? null) : null }),
+  });
 }
 
 export async function saveExercise(payload: SaveExercisePayload): Promise<{ ok: boolean } | unknown> {
