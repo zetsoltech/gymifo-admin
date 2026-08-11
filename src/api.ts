@@ -50,6 +50,7 @@ export type Exercise = {
   _id?: string;
   qaStatus?: QaStatus;
   qaSeverity?: QaSeverity | null;
+  qaComment?: string | null;
 };
 
 export type QaStatus = 'unreviewed' | 'pass' | 'needs_improvement' | 'wrong';
@@ -787,6 +788,7 @@ export async function setExerciseQa(
   id: string | number,
   qaStatus: QaStatus,
   qaSeverity?: QaSeverity | null,
+  qaComment?: string | null,
 ): Promise<{ ok: boolean } | unknown> {
   if (USE_MOCK_API) {
     const exercises = getMockExercises();
@@ -794,6 +796,7 @@ export async function setExerciseQa(
     if (existing) {
       existing.qaStatus = qaStatus;
       existing.qaSeverity = qaStatus === 'needs_improvement' ? (qaSeverity ?? null) : null;
+      if (qaComment !== undefined) existing.qaComment = qaComment || null;
       saveMockExercises(exercises);
     }
     return { ok: true };
@@ -801,7 +804,12 @@ export async function setExerciseQa(
 
   return request(`/exercises/${id}/qa`, {
     method: 'PATCH',
-    body: JSON.stringify({ qaStatus, qaSeverity: qaStatus === 'needs_improvement' ? (qaSeverity ?? null) : null }),
+    body: JSON.stringify({
+      qaStatus,
+      qaSeverity: qaStatus === 'needs_improvement' ? (qaSeverity ?? null) : null,
+      // undefined = don't touch the saved comment (matches backend contract)
+      ...(qaComment !== undefined ? { qaComment: qaComment || null } : {}),
+    }),
   });
 }
 

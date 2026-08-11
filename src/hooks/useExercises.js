@@ -201,8 +201,13 @@ export function useToggleExerciseActive() {
 export function useSetExerciseQa() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, qaStatus, qaSeverity }) => setExerciseQa(id, qaStatus, qaSeverity),
-    onMutate: async ({ id, qaStatus, qaSeverity }) => {
+    // qaComment is optional/undefined by default — omitting it leaves the
+    // saved comment untouched (matches the backend contract). `silent`
+    // suppresses the success toast for comment-field saves (debounced on
+    // blur) so it doesn't fire a toast on every field the reviewer tabs out of.
+    mutationFn: ({ id, qaStatus, qaSeverity, qaComment }) =>
+      setExerciseQa(id, qaStatus, qaSeverity, qaComment),
+    onMutate: async ({ id, qaStatus, qaSeverity, qaComment }) => {
       await queryClient.cancelQueries({ queryKey: ['exercises'] });
       const snapshots = queryClient.getQueriesData({ queryKey: ['exercises'] });
       snapshots.forEach(([key, data]) => {
@@ -211,7 +216,12 @@ export function useSetExerciseQa() {
           ...data,
           exercises: data.exercises.map((exercise) =>
             String(exercise.id ?? exercise._id) === String(id)
-              ? { ...exercise, qaStatus, qaSeverity: qaStatus === 'needs_improvement' ? qaSeverity : null }
+              ? {
+                  ...exercise,
+                  qaStatus,
+                  qaSeverity: qaStatus === 'needs_improvement' ? qaSeverity : null,
+                  ...(qaComment !== undefined ? { qaComment } : {}),
+                }
               : exercise,
           ),
         });
@@ -222,8 +232,8 @@ export function useSetExerciseQa() {
       context?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data));
       toast.error('Could not save review — reverted.');
     },
-    onSuccess: () => {
-      toast.success('Review saved.');
+    onSuccess: (_data, variables) => {
+      if (!variables?.silent) toast.success('Review saved.');
     },
     // No invalidate-on-settle here on purpose: the optimistic value is already
     // correct, and this page is reviewed rapid-fire — a background refetch per

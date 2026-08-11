@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 
 const pageSize = 10;
 const allValue = '__all__';
@@ -55,6 +56,7 @@ function normalizeExercise(exercise) {
     videoUrl,
     qaStatus: exercise.qaStatus || 'unreviewed',
     qaSeverity: exercise.qaSeverity || null,
+    qaComment: exercise.qaComment || '',
   };
 }
 
@@ -62,14 +64,30 @@ function toArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-/** One video card: hover-to-preview, expand-to-modal, and the Pass / Needs
- * Improvement (+ severity) / Wrong review controls. */
-function VideoQaCard({ exercise, onReview, onExpand, isSaving }) {
+/** One video card: hover-to-preview, expand-to-modal, the Pass / Needs
+ * Improvement (+ severity) / Wrong review controls, and a comment note. */
+function VideoQaCard({ exercise, onReview, onCommentSave, onExpand, isSaving }) {
   const [severityOpen, setSeverityOpen] = useState(exercise.qaStatus === 'needs_improvement');
+  // Local draft so typing feels instant; only saved on blur (debounced network
+  // calls per keystroke would be wasteful on a page meant for rapid review).
+  const [commentDraft, setCommentDraft] = useState(exercise.qaComment || '');
 
   useEffect(() => {
     setSeverityOpen(exercise.qaStatus === 'needs_improvement');
   }, [exercise.qaStatus]);
+
+  // Keep the draft in sync if the row updates from elsewhere (e.g. optimistic
+  // rollback), but don't clobber what the reviewer is actively typing.
+  useEffect(() => {
+    setCommentDraft(exercise.qaComment || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise.id]);
+
+  function handleCommentBlur() {
+    if (commentDraft !== (exercise.qaComment || '')) {
+      onCommentSave(exercise.id, commentDraft);
+    }
+  }
 
   function handleHoverStart(event) {
     const video = event.currentTarget;
@@ -190,6 +208,15 @@ function VideoQaCard({ exercise, onReview, onExpand, isSaving }) {
             ))}
           </div>
         )}
+
+        <Textarea
+          value={commentDraft}
+          onChange={(event) => setCommentDraft(event.target.value)}
+          onBlur={handleCommentBlur}
+          placeholder="Add a note (e.g. what's wrong, timestamp)…"
+          rows={2}
+          className="min-h-0 resize-none text-xs"
+        />
       </CardContent>
     </Card>
   );
@@ -256,6 +283,20 @@ export function VideoQaPage() {
 
   function handleReview(id, qaStatus, qaSeverity) {
     qaMutation.mutate({ id, qaStatus, qaSeverity });
+  }
+
+  // Comment saves keep the exercise's current status/severity untouched and
+  // skip the success toast (it fires on blur, not a deliberate button click).
+  function handleCommentSave(id, qaComment) {
+    const exercise = exercises.find((item) => item.id === id);
+    if (!exercise) return;
+    qaMutation.mutate({
+      id,
+      qaStatus: exercise.qaStatus,
+      qaSeverity: exercise.qaSeverity,
+      qaComment,
+      silent: true,
+    });
   }
 
   const muscleGroups = toArray(lookups.muscleGroups);
@@ -356,6 +397,7 @@ export function VideoQaPage() {
               key={exercise.id}
               exercise={exercise}
               onReview={handleReview}
+              onCommentSave={handleCommentSave}
               onExpand={setPreviewExercise}
               isSaving={qaMutation.isPending && qaMutation.variables?.id === exercise.id}
             />
