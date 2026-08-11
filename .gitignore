@@ -18,6 +18,7 @@ dist-ssr
 *.local
 
 # Environment (keep .env.example)
+.env
 .env.*.local
 
 # Editor / OS
@@ -30,4 +31,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-config.bat
