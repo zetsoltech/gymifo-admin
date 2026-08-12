@@ -64,6 +64,10 @@ function toArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function isOptimizedVideoUrl(videoUrl) {
+  return typeof videoUrl === 'string' && /(?:^|\/)exercises\/compressed_video\//.test(videoUrl);
+}
+
 /** One video card: hover-to-preview, expand-to-modal, the Pass / Needs
  * Improvement (+ severity) / Wrong review controls, and a comment note. */
 function VideoQaCard({ exercise, onReview, onCommentSave, onExpand, isSaving }) {
@@ -122,20 +126,23 @@ function VideoQaCard({ exercise, onReview, onCommentSave, onExpand, isSaving }) 
             No video
           </div>
         )}
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          className="absolute top-2 right-2 opacity-0 shadow transition-opacity group-hover:opacity-100"
-          onClick={(event) => {
-            event.stopPropagation();
-            onExpand(exercise);
-          }}
-          aria-label="Play full video"
-          title="Play full video"
-        >
-          <Maximize2 className="size-3.5" />
-        </Button>
+        <div className="absolute top-2 right-2 flex items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            className="opacity-0 shadow transition-opacity group-hover:opacity-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              onExpand(exercise);
+            }}
+            aria-label="Play full video"
+            title="Play full video"
+          >
+            <Maximize2 className="size-3.5" />
+          </Button>
+          {isOptimizedVideoUrl(exercise.videoUrl) && <Badge variant="secondary">Optimized</Badge>}
+        </div>
         {!exercise.videoUrl && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/60">
             <Play className="size-8" />
