@@ -249,6 +249,11 @@ export function VideoQaPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  // The QA status filter encodes severity as "needs_improvement:high" etc. so
+  // the three severities are separate, selectable dropdown items — decode
+  // that back into the two independent params the API already accepts.
+  const [qaStatusFilter, qaSeverityFilter] = (filters.qaStatus || '').split(':');
+
   const queryParams = {
     page,
     limit: pageSize,
@@ -259,7 +264,8 @@ export function VideoQaPage() {
     difficulty: filters.difficulty,
     bodyPart: filters.bodyPart,
     hasVideo: true, // nothing to QA without a video
-    qaStatus: filters.qaStatus || undefined,
+    qaStatus: qaStatusFilter || undefined,
+    qaSeverity: qaSeverityFilter || undefined,
   };
 
   const exercisesQuery = useExercisesQuery(queryParams);
@@ -383,7 +389,10 @@ export function VideoQaPage() {
             <SelectItem value={allValue}>All QA statuses</SelectItem>
             <SelectItem value="unreviewed">Unreviewed</SelectItem>
             <SelectItem value="pass">Pass</SelectItem>
-            <SelectItem value="needs_improvement">Needs Improvement</SelectItem>
+            <SelectItem value="needs_improvement">Needs Improvement (any)</SelectItem>
+            <SelectItem value="needs_improvement:high">Needs Improvement — High</SelectItem>
+            <SelectItem value="needs_improvement:medium">Needs Improvement — Medium</SelectItem>
+            <SelectItem value="needs_improvement:low">Needs Improvement — Low</SelectItem>
             <SelectItem value="wrong">Wrong</SelectItem>
           </SelectContent>
         </Select>
