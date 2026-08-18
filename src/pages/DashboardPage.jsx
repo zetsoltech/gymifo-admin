@@ -238,7 +238,7 @@ function normalizeRevenue(data, period) {
 export function DashboardPage() {
   const [period, setPeriod] = useState('monthly');
   const dashboard = useDashboard(period);
-  const { isLoading, isError } = dashboard;
+  const { isLoading, isError, error } = dashboard;
   const signupsRef = useRef(null);
   const paidPieRef = useRef(null);
   const paidTrendRef = useRef(null);
@@ -408,7 +408,7 @@ export function DashboardPage() {
 
       {isError ? (
         <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          Unable to load dashboard data. Please try again.
+          {error?.message || 'Unable to load dashboard data. Please try again.'}
         </div>
       ) : null}
 
