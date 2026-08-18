@@ -31,5 +31,8 @@ export function useDashboard(period) {
     isLoading: results.some((result) => result.isPending),
     isFetching: results.some((result) => result.isFetching),
     isError: results.some((result) => result.isError),
+    // Surface the first real failure so the page can name the cause instead of
+    // showing a blanket "try again" for everything.
+    error: results.find((result) => result.error)?.error ?? null,
   };
 }

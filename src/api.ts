@@ -1,4 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// https, not http: the API sends HSTS, so a browser silently upgrades http://
+// requests — and that upgrade counts as a redirect, which a CORS preflight is
+// forbidden from following (Chrome: "PreflightDisallowedRedirect").
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.gymifo.com';
 const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
 const ACCEPT_LANGUAGE = import.meta.env.VITE_ACCEPT_LANGUAGE || 'en';
 
@@ -532,15 +535,75 @@ function saveMockUsers(users: User[]): void {
   localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
 }
 
-function normalizeErrorMessage(payload: RequestErrorPayload | null): string {
-  if (Array.isArray(payload?.message)) return payload.message.join(', ');
-  return payload?.message || payload?.error || 'Request failed';
+/**
+ * Codes carried on thrown errors so callers can tell *why* a request failed
+ * instead of pattern-matching on prose. Every error thrown out of request()
+ * carries exactly one of these.
+ */
+export const NETWORK_ERROR = 'NETWORK_ERROR';
+export const SERVER_ERROR = 'SERVER_ERROR';
+export const REQUEST_FAILED = 'REQUEST_FAILED';
+export const SESSION_EXPIRED = 'SESSION_EXPIRED';
+
+export type ApiError = Error & { code: string; status?: number };
+
+// http://localhost is a legitimate dev target: it is a secure context, so it is
+// exempt from mixed-content blocking and normally carries no HSTS.
+const LOCAL_API = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
+
+/**
+ * fetch() rejects with a bare TypeError for every failure *below* HTTP — DNS,
+ * TCP, TLS, or a rejected CORS preflight. The spec collapses them all into one
+ * opaque error on purpose: if a page could tell "refused" from "unreachable"
+ * it could map private networks. Chrome prints the real reason to the console
+ * and nowhere else.
+ *
+ * So assert only what is actually detectable from here, and offer the rest as
+ * possibilities rather than blaming the server for what is often a CORS fault.
+ *
+ * Exported and parameterized so the branches can be tested directly.
+ */
+export function describeNetworkFailure(
+  baseUrl: string = API_BASE_URL,
+  pageProtocol: string | undefined = globalThis.location?.protocol,
+): string {
+  // Detectable, and always fatal. An HTTPS page may not call an http:// API at
+  // all; and http:// to an HSTS host gets silently upgraded to https://, which
+  // counts as a redirect — and a preflight may not follow one. Chrome reports
+  // that second case as "PreflightDisallowedRedirect".
+  if (baseUrl.startsWith('http://') && !LOCAL_API.test(baseUrl)) {
+    const cause = pageProtocol === 'https:'
+      ? 'this page is served over HTTPS, so the browser blocks it as mixed content'
+      : 'the API sends HSTS, so the browser upgrades the request to HTTPS, and a CORS preflight cannot follow that redirect';
+    return `The API URL ${baseUrl} uses http://. Set VITE_API_BASE_URL to https:// — ${cause}.`;
+  }
+
+  return `The request to ${baseUrl} never completed. The server may be unreachable, or it may be refusing this origin (CORS). Open DevTools → Network for the exact reason.`;
+}
+
+function networkError(): ApiError {
+  return Object.assign(new Error(describeNetworkFailure()), { code: NETWORK_ERROR });
+}
+
+function normalizeErrorMessage(payload: RequestErrorPayload | null, status: number): string {
+  const message = payload?.message;
+  if (Array.isArray(message)) return message.join(', ');
+  if (message) return message;
+  if (payload?.error) return payload.error;
+  // No JSON body means the API itself never answered — a gateway or proxy
+  // replied instead. Keep the status visible so an outage stays identifiable
+  // rather than collapsing into a bare "Request failed".
+  if (status >= 500) return `The server is not responding (HTTP ${status}). It may be restarting — please try again in a few minutes.`;
+  return `Request failed (HTTP ${status}).`;
 }
 
 async function parseJsonResponse<T>(res: Response): Promise<T> {
   const payload = await res.json().catch(() => null) as (T & RequestErrorPayload & { statusCode?: number }) | null;
   if (!res.ok) {
-    throw new Error(normalizeErrorMessage(payload));
+    throw Object.assign(new Error(normalizeErrorMessage(payload, res.status)), {
+      code: res.status >= 500 ? SERVER_ERROR : REQUEST_FAILED,
+      status: res.status,
+    }) as ApiError;
   }
   if (payload && typeof payload === 'object' && 'data' in payload) {
     return payload.data as T;
@@ -573,7 +636,10 @@ async function fetchNewAccessToken(): Promise<string> {
     headers: { 'Content-Type': 'application/json', 'Accept-Language': ACCEPT_LANGUAGE },
     body: JSON.stringify({ refreshToken }),
   }).catch(() => null);
-  if (!res?.ok) return '';
+  // A network failure here is not a rejected refresh token. Falling through to
+  // '' would sign the admin out over a transient blip, so report the outage.
+  if (!res) throw networkError();
+  if (!res.ok) return '';
 
   const payload = await res.json().catch(() => null) as LoginResponse | null;
   const tokens = extractTokens(payload);
@@ -598,7 +664,7 @@ function sessionExpiredError(): Error {
   window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   // Tagged with a code, not a message — the backend localizes its 401 text.
   return Object.assign(new Error('Your session has ended. Please sign in again.'), {
-    code: 'SESSION_EXPIRED',
+    code: SESSION_EXPIRED,
   });
 }
 
@@ -615,6 +681,8 @@ async function request<T>(path: string, options: RequestInit = {}, allowRetry = 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
+  }).catch(() => {
+    throw networkError();
   });
 
   // A 401 on /auth/* is a real credential failure (bad password), not an

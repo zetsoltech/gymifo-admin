@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDashboardOverview, getSignupsTrend, getPaidVsFree, getRevenue } from './api.ts';
+import {
+  getDashboardOverview,
+  getSignupsTrend,
+  getPaidVsFree,
+  getRevenue,
+  describeNetworkFailure,
+  NETWORK_ERROR,
+  REQUEST_FAILED,
+  SERVER_ERROR,
+  SESSION_EXPIRED,
+} from './api.ts';
 
 // The dashboard fires these four in parallel — the exact fan-out that made the
 // original bug show four toasts at once.
@@ -86,8 +96,99 @@ describe('401 handling', () => {
 
     const error = await login('admin@gymifo.com', 'wrong').catch((err) => err);
 
-    expect(error.code).toBeUndefined();
+    expect(error.code).toBe(REQUEST_FAILED);
+    expect(error.code).not.toBe(SESSION_EXPIRED);
+    expect(error.status).toBe(401);
     expect(error.message).toBe('INVALID_EMAIL_OR_PASSWORD');
     expect(refreshCalls()).toHaveLength(0);
+  });
+});
+
+describe('failure causes are distinguishable', () => {
+  // What the browser actually throws when it cannot open a connection at all:
+  // DNS, TCP, TLS, or a blocked preflight all surface as this bare TypeError.
+  const offline = () => vi.fn(async () => {
+    throw new TypeError('Failed to fetch');
+  });
+
+  it('an unreachable server reads as a network failure, not "Failed to fetch"', async () => {
+    globalThis.fetch = offline();
+
+    const error = await getDashboardOverview('monthly').catch((err) => err);
+
+    expect(error.code).toBe(NETWORK_ERROR);
+    expect(error.message).not.toBe('Failed to fetch');
+  });
+
+  it('a dead network during refresh does NOT sign the admin out', async () => {
+    // A 401 sends it to refresh, and the network dies there. Reporting an
+    // expired session would discard a perfectly good login over a blip.
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.endsWith('/auth/refresh')) throw new TypeError('Failed to fetch');
+      return unauthorized();
+    });
+
+    const error = await getDashboardOverview('monthly').catch((err) => err);
+
+    expect(error.code).toBe(NETWORK_ERROR);
+    expect(store.get('gymifo_token')).toBe('stale-access');
+    expect(store.get('gymifo_refresh_token')).toBe('stored-refresh');
+    expect(globalThis.window.dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it('a gateway 502 with no JSON body keeps its status instead of "Request failed"', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 502,
+      json: async () => { throw new SyntaxError('Unexpected token < in JSON'); },
+    }));
+
+    const error = await getDashboardOverview('monthly').catch((err) => err);
+
+    expect(error.code).toBe(SERVER_ERROR);
+    expect(error.status).toBe(502);
+    expect(error.message).toContain('502');
+  });
+
+  it('login on an unreachable API explains the outage, not the password', async () => {
+    const { login } = await import('./api.ts');
+    globalThis.fetch = offline();
+
+    const error = await login('admin@gymifo.com', 'correct-password').catch((err) => err);
+
+    expect(error.code).toBe(NETWORK_ERROR);
+    expect(error.message).not.toBe('Failed to fetch');
+  });
+
+  it('an http:// API URL is reported as the protocol bug it is, not "server down"', () => {
+    // The real dev-mode failure: the API sends HSTS, so Chrome upgrades the
+    // request to https, and a CORS preflight may not follow that redirect
+    // ("PreflightDisallowedRedirect"). Blaming the server sends people off to
+    // check a backend that is perfectly healthy.
+    const message = describeNetworkFailure('http://api.gymifo.com', 'http:');
+
+    expect(message).toContain('Set VITE_API_BASE_URL to https://');
+    expect(message).toContain('preflight cannot follow that redirect');
+    expect(message).not.toContain('may be unreachable');
+  });
+
+  it('an https page calling an http API is named as mixed content', () => {
+    const message = describeNetworkFailure('http://api.gymifo.com', 'https:');
+
+    expect(message).toContain('mixed content');
+  });
+
+  it('http://localhost is a valid dev target, not a protocol mistake', () => {
+    const message = describeNetworkFailure('http://localhost:8000', 'http:');
+
+    expect(message).not.toContain('Set VITE_API_BASE_URL');
+    expect(message).toContain('never completed');
+  });
+
+  it('an https API that simply cannot be reached does not guess at a cause', () => {
+    const message = describeNetworkFailure('https://api.gymifo.com', 'https:');
+
+    expect(message).toContain('never completed');
+    expect(message).toContain('CORS');
   });
 });
