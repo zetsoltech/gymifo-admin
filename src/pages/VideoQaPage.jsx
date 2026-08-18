@@ -239,6 +239,7 @@ export function VideoQaPage() {
     difficulty: '',
     bodyPart: '',
     qaStatus: '',
+    status: '',
   });
   const [page, setPage] = useState(1);
   const [previewExercise, setPreviewExercise] = useState(null);
@@ -266,6 +267,7 @@ export function VideoQaPage() {
     hasVideo: true, // nothing to QA without a video
     qaStatus: qaStatusFilter || undefined,
     qaSeverity: qaSeverityFilter || undefined,
+    isActive: filters.status === '' ? undefined : filters.status === 'active',
   };
 
   const exercisesQuery = useExercisesQuery(queryParams);
@@ -340,7 +342,7 @@ export function VideoQaPage() {
       </div>
 
       {/* Filters — same filter set as the Exercises tab, plus QA status. */}
-      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">
         <Select value={filters.muscleGroup || allValue} onValueChange={(value) => updateFilter('muscleGroup', value)}>
           <SelectTrigger className="w-full"><SelectValue placeholder="Muscle group" /></SelectTrigger>
           <SelectContent>
@@ -394,6 +396,14 @@ export function VideoQaPage() {
             <SelectItem value="needs_improvement:medium">Needs Improvement — Medium</SelectItem>
             <SelectItem value="needs_improvement:low">Needs Improvement — Low</SelectItem>
             <SelectItem value="wrong">Wrong</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filters.status || allValue} onValueChange={(value) => updateFilter('status', value)}>
+          <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={allValue}>All statuses</SelectItem>
+            <SelectItem value="active">Active only</SelectItem>
+            <SelectItem value="inactive">Inactive only</SelectItem>
           </SelectContent>
         </Select>
       </div>
